@@ -1,0 +1,42 @@
+# Goal
+Fully playable version of Tetris
+Similar gameplay to Tetric Classic on GameBoy Classic
+Simple building for windows
+> Stuff that does not matter
+   - Code architecture
+   - Perfect re-creation
+
+# Gameplay Notes
+> screens
+   - splash
+   - music type
+   - game
+   - death -> slash ?
+> GUI
+   - borders
+   - field
+   - score
+   - level
+   - lines
+   - next shape
+> tetro
+   - rotations
+   - blocking impossible rotations
+   - support all tetro types
+   - random type spawning in level based on seed
+   - render tetros properly
+   - movement left and right + input timing
+   - movement jolt down with + input timing
+   - full line break + flash + drop down
+> juice
+   - music
+   - sfx
+
+
+gcc
+ROOT\\main.c ROOT\\other.c ROOT\\etc.c
+-L C:\dev\libraries\SDL3-3.2.6\i686-w64-mingw32\lib
+-I ROOT\\include
+-I C:\dev\libraries\SDL3-3.2.6\i686-w64-mingw32\include
+-lSDL3
+-o ROOT\\build\\Tetris
