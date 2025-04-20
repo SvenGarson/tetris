@@ -194,12 +194,26 @@ bool help_texture_rgba_2d_coords_to_linear(struct texture_rgba_s * instance, int
    return true;
 }
 
-bool help_texture_rgba_plot_pixel(struct texture_rgba_s * instance, int x, int y, color_rgba_t color)
+bool help_texture_rgba_plot_texel(struct texture_rgba_s * instance, int x, int y, color_rgba_t color)
 {
    int texel_index;
    if (help_texture_rgba_2d_coords_to_linear(instance, x, y, &texel_index))
    {
       instance->texels[texel_index] = color;
+      return true;
+   }
+
+   return false;
+}
+
+bool help_texture_rgba_access_pixel(struct texture_rgba_s * instance, int x, int y, color_rgba_t * out_color)
+{
+   if (NULL == instance || NULL == out_color) return false;
+
+   int texel_index;
+   if (help_texture_rgba_2d_coords_to_linear(instance, x, y, &texel_index))
+   {
+      *out_color = instance->texels[texel_index];
       return true;
    }
 
@@ -235,6 +249,67 @@ struct texture_rgba_s * help_texture_rgba_make(int width, int height, color_rgba
 
    // Success
    return instance;
+}
+
+struct texture_rgba_s * help_texture_rgba_from_png(const char * dir_abs_file)
+{
+   // Load image to convert
+   SDL_Surface * img_surface = IMG_Load(dir_abs_file);
+   if (NULL == img_surface)
+   {
+      printf("\nFailed to load image [%s] to create texture rgba from", dir_abs_file);
+      return NULL;
+   }
+
+   // Create texture rgba
+   struct texture_rgba_s * img_texture = help_texture_rgba_make(
+      img_surface->w,
+      img_surface->h,
+      color_rgba_make_rgba(0x00, 0x00, 0x00, 0xFF)
+   );
+   if (NULL == img_texture)
+   {
+      printf("\nFailed to create target texture for image [%s] conversion", dir_abs_file);
+      SDL_DestroySurface(img_surface);
+      return NULL;
+   }
+
+   // Copy image to texture
+   for (int y = 0; y < img_surface->h; ++y)
+   {
+      for (int x = 0; x < img_surface->w; ++x)
+      {
+         // Get surface pixel color
+         uint8_t surface_red, surface_green, surface_blue, surface_alpha;
+         const bool SUCCESS_SURFACE_TEXEL_ACCESS = SDL_ReadSurfacePixel(
+            img_surface,
+            x,
+            y,
+            &surface_red,
+            &surface_green,
+            &surface_blue,
+            &surface_alpha
+         );
+         color_rgba_t surface_color = color_rgba_make_rgba(0xFF, 0x00, 0xFF, 0xFF);
+         if (SUCCESS_SURFACE_TEXEL_ACCESS)
+         {
+            surface_color = color_rgba_make_rgba(surface_red, surface_green, surface_blue, surface_alpha);
+         }
+         else
+         {
+            printf("\nFailed to access image [%s] texel [%-4d, %-4d] during conversion");
+         }
+
+         // Plot into texture
+         help_texture_rgba_plot_texel(img_texture, x, y, surface_color);
+      }
+   }
+
+   // Cleanup
+   SDL_DestroySurface(img_surface);
+
+   // Success
+   return img_texture;
 }
 
 /*
@@ -330,17 +405,18 @@ int main(int argc, char * argv[])
       return EXIT_FAILURE;
    }
 
-   // Load required resources
+   // Prepare resource strings
    char dir_abs_res_images[1024];
    snprintf(dir_abs_res_images, sizeof(dir_abs_res_images), "%s\\images\\", DIR_ABS_RES);
-
    char dir_abs_res_img_tiles[1024];
    const char * TILES_IMAGE_FILE_NAME = "tiles.png";
    snprintf(dir_abs_res_img_tiles, sizeof(dir_abs_res_img_tiles), "%s\\%s", dir_abs_res_images, TILES_IMAGE_FILE_NAME);
-   SDL_Surface * img_tiles = IMG_Load(dir_abs_res_img_tiles);
-   if (NULL == img_tiles)
+
+   // Load entity texture
+   struct texture_rgba_s * tex_tiles = help_texture_rgba_from_png(dir_abs_res_img_tiles);
+   if (NULL == tex_tiles)
    {
-      printf("\nFailed to load tiles image [%s] from resources [%s]", TILES_IMAGE_FILE_NAME, dir_abs_res_images);
+      printf("\nFailed to convert tile image to tile texture");
       return EXIT_FAILURE;
    }
 
@@ -373,11 +449,21 @@ int main(int argc, char * argv[])
       // -> Clear
       help_texture_rgba_clear(tex_virtual, color_rgba_make_rgba(15, 15, 15, 255));
       // -> Render scene
-      for (int y = 0; y < VIRTUAL_SIZE.y; ++y)
+      for (int ty = 0; ty < tex_tiles->height; ++ty)
       {
-         for (int x = 0; x < VIRTUAL_SIZE.x; ++x)
+         for (int tx = 0; tx < tex_tiles->width; ++tx)
          {
-            help_texture_rgba_plot_pixel(tex_virtual, x, y, color_rgba_make_rgba(rand() % 256, 0x00, 0x00, 0xFF));
+            color_rgba_t tiles_texel_color;
+            if (help_texture_rgba_access_pixel(tex_tiles, tx, ty, &tiles_texel_color))
+            {
+               // Texel access OK
+               help_texture_rgba_plot_texel(tex_virtual, tx, ty, tiles_texel_color);
+            }
+            else
+            {
+               // Texel access failed
+               help_texture_rgba_plot_texel(tex_virtual, tx, ty, color_rgba_make_rgba(0xFF, 0x00, 0xFF, 0xFF));
+            }
          }
       }
 
@@ -436,6 +522,7 @@ int main(int argc, char * argv[])
 
    // Cleanup custom
    help_texture_rgba_destroy(tex_virtual);
+   help_texture_rgba_destroy(tex_tiles);
 
    // Cleanup SDL
    SDL_DestroyTexture(sdl_texture_online);

@@ -38,3 +38,4 @@ Simple building for windows
 
 # Things to improve
 - adding source files, libraries, and linking to existing build process
+- disable terminal running on release build
