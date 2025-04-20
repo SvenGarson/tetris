@@ -246,6 +246,13 @@ struct virtual_s * virtual_make(color_rgba_t clear_color, int width, int height)
       - specific texture -> texels
       - sprite dimensions
       - type ?
+
+   > What we need to render
+      - sprites (size, position, texture)
+      - font (scale, position,)
+
+   > Attributes required
+      - no transparency 
 */
 
 // Logic - Main
