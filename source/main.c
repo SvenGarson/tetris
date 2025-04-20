@@ -49,6 +49,26 @@ color_rgba_t color_rgba_make_rgba(uint8_t red, uint8_t green, uint8_t blue, uint
    return color;
 }
 
+uint8_t color_rgba_channel_red(color_rgba_t color)
+{
+   return (uint8_t)(color >> 24);
+}
+
+uint8_t color_rgba_channel_green(color_rgba_t color)
+{
+   return (uint8_t)(color >> 16);
+}
+
+uint8_t color_rgba_channel_blue(color_rgba_t color)
+{
+   return (uint8_t)(color >> 8);
+}
+
+uint8_t color_rgba_channel_alpha(color_rgba_t color)
+{
+   return (uint8_t)color;
+}
+
 // Helpers - Vectors
 struct vec_2i_s {
    int x;
@@ -206,7 +226,7 @@ bool help_texture_rgba_plot_texel(struct texture_rgba_s * instance, int x, int y
    return false;
 }
 
-bool help_texture_rgba_access_pixel(struct texture_rgba_s * instance, int x, int y, color_rgba_t * out_color)
+bool help_texture_rgba_access_texel(struct texture_rgba_s * instance, int x, int y, color_rgba_t * out_color)
 {
    if (NULL == instance || NULL == out_color) return false;
 
@@ -312,30 +332,61 @@ struct texture_rgba_s * help_texture_rgba_from_png(const char * dir_abs_file)
    return img_texture;
 }
 
-/*
-   > render_sprite(x, y, type, buffer, virtual dimensions)
-      - tiled and non-tiled ?
-      - various sizes at 8x8 and higher dimensions ?
+// Logic - Sprites
+struct sprite_s {
+   struct vec_2i_s texture_min;
+   struct vec_2i_s texture_size;
+};
 
-   > virtual render target
-      - virtual size
-      - rgba buffer
+struct sprite_s sprite_make(int tile_x, int tile_y, int tile_size)
+{
+   struct sprite_s sprite;
 
-   > rendering
-      render_sprite_into(vrt, x, y, type)
+   sprite.texture_min = vec_2i_make_xy(tile_x * tile_size, tile_y * tile_size);
+   sprite.texture_size = vec_2i_make_xy(tile_size, tile_size);
 
-   > What is a sprite ?
-      - specific texture -> texels
-      - sprite dimensions
-      - type ?
+   return sprite;
+}
 
-   > What we need to render
-      - sprites (size, position, texture)
-      - font (scale, position,)
+// Logic - Textured Sprite Rendering
+bool help_tex_sprite_render(struct sprite_s sprite, int x, int y, struct texture_rgba_s * texture_sprite, struct texture_rgba_s * texture_target)
+{
+   if (NULL == texture_sprite || NULL == texture_target) return false;
 
-   > Attributes required
-      - no transparency 
-*/
+   // TODO-GS: Plot only what is stricly necessary
+   for (int spr_y = 0; spr_y < sprite.texture_size.y; ++spr_y)
+   {
+      for (int spr_x = 0; spr_x < sprite.texture_size.x; ++spr_x)
+      {
+         // Access sprite source texture texel
+         color_rgba_t source_texel_color;
+         const bool SUCCESS_ACCESS_SOURCE_TEXEL = help_texture_rgba_access_texel(
+            texture_sprite,
+            sprite.texture_min.x + spr_x,
+            sprite.texture_min.y + spr_y,
+            &source_texel_color
+         );
+         const color_rgba_t SAFE_SOURCE_TEXEL_COLOR = SUCCESS_ACCESS_SOURCE_TEXEL ? source_texel_color : color_rgba_make_rgba(0xFF, 0x00, 0xFF, 0xFF);
+
+         // Do not draw totally transparent texels for now
+         // TODO-GS: Implement alpha blending ?
+         if (0 == color_rgba_channel_alpha(SAFE_SOURCE_TEXEL_COLOR))
+         {
+            continue;
+         }
+
+         // Plot sprite source texture color into target texture
+         const bool SUCCESS_PLOTTING_TEXEL = help_texture_rgba_plot_texel(
+            texture_target,
+            x + spr_x,
+            y + spr_y,
+            SAFE_SOURCE_TEXEL_COLOR
+         );
+      }
+   }
+
+   return true;
+}
 
 // Logic - Main
 int main(int argc, char * argv[])
@@ -413,12 +464,16 @@ int main(int argc, char * argv[])
    snprintf(dir_abs_res_img_tiles, sizeof(dir_abs_res_img_tiles), "%s\\%s", dir_abs_res_images, TILES_IMAGE_FILE_NAME);
 
    // Load entity texture
-   struct texture_rgba_s * tex_tiles = help_texture_rgba_from_png(dir_abs_res_img_tiles);
-   if (NULL == tex_tiles)
+   struct texture_rgba_s * tex_sprites = help_texture_rgba_from_png(dir_abs_res_img_tiles);
+   if (NULL == tex_sprites)
    {
       printf("\nFailed to convert tile image to tile texture");
       return EXIT_FAILURE;
    }
+
+   // Create rendering sprites
+   const int SPRITE_TILE_SIZE = 8;
+   const struct sprite_s SPR_A = sprite_make(0, 0, SPRITE_TILE_SIZE);
 
    // Log engine status
    const int DW = 20;
@@ -447,25 +502,18 @@ int main(int argc, char * argv[])
 
       // Render into offline texture
       // -> Clear
-      help_texture_rgba_clear(tex_virtual, color_rgba_make_rgba(15, 15, 15, 255));
+      help_texture_rgba_clear(tex_virtual, color_rgba_make_rgba(50, 50, 50, 255));
       // -> Render scene
-      for (int ty = 0; ty < tex_tiles->height; ++ty)
-      {
-         for (int tx = 0; tx < tex_tiles->width; ++tx)
-         {
-            color_rgba_t tiles_texel_color;
-            if (help_texture_rgba_access_pixel(tex_tiles, tx, ty, &tiles_texel_color))
-            {
-               // Texel access OK
-               help_texture_rgba_plot_texel(tex_virtual, tx, ty, tiles_texel_color);
-            }
-            else
-            {
-               // Texel access failed
-               help_texture_rgba_plot_texel(tex_virtual, tx, ty, color_rgba_make_rgba(0xFF, 0x00, 0xFF, 0xFF));
-            }
-         }
-      }
+      static float spr_x = 0.0f;
+      static float spr_y = 0.0f;
+      const int FRAMES_PER_SECOND = 60;
+      const float DT = 1.0f / FRAMES_PER_SECOND;
+      const float PIXELS_PER_SECOND = 5.0f;
+      spr_x += PIXELS_PER_SECOND * DT;
+      spr_y += PIXELS_PER_SECOND * DT;
+      help_tex_sprite_render(SPR_A, spr_x, spr_y, tex_sprites, tex_virtual);
+      help_tex_sprite_render(SPR_A, spr_x + SPRITE_TILE_SIZE, spr_y, tex_sprites, tex_virtual);
+      help_tex_sprite_render(SPR_A, spr_x + SPRITE_TILE_SIZE * 2, spr_y, tex_sprites, tex_virtual);
 
       // Copy offline to online texture
       const bool SUCCESS_UPDATE_TEXTURE = SDL_UpdateTexture(
@@ -476,7 +524,7 @@ int main(int argc, char * argv[])
       );
 
       // Clear backbuffer
-      SDL_SetRenderDrawColor(sdl_renderer, 10, 10, 10, 0xFF);
+      SDL_SetRenderDrawColor(sdl_renderer, 0x00, 0x00, 0x00, 0xFF);
       const bool SUCCESS_BACKBUFFER_CLEAR = SDL_RenderClear(sdl_renderer);
       if (!SUCCESS_BACKBUFFER_CLEAR)
       {
@@ -522,7 +570,7 @@ int main(int argc, char * argv[])
 
    // Cleanup custom
    help_texture_rgba_destroy(tex_virtual);
-   help_texture_rgba_destroy(tex_tiles);
+   help_texture_rgba_destroy(tex_sprites);
 
    // Cleanup SDL
    SDL_DestroyTexture(sdl_texture_online);
