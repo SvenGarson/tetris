@@ -129,6 +129,125 @@ SDL_FRect help_virtual_max_render_scale_region(struct vec_2i_s actual_window_siz
    );
 }
 
+// Helpers - Virtual Rendering
+struct virtual_s {
+   color_rgba_t * pixels;
+   int width;
+   int height;
+};
+
+int virtual_pixel_count(struct virtual_s * instance)
+{
+   return instance ? (instance->width * instance->height) : 0;
+}
+
+bool virtual_clear_pixels(struct virtual_s * instance, color_rgba_t clear_color)
+{
+   if (NULL == instance) return false;
+
+   for (int i = 0; i < virtual_pixel_count(instance); ++i)
+   {
+      instance->pixels[i] = clear_color;
+   }
+
+   return true;
+}
+
+struct vec_2i_s virtual_size(struct virtual_s * instance)
+{
+   return instance ? vec_2i_make_xy(instance->width, instance->height) : vec_2i_make_xy(0, 0);
+}
+
+void virtual_destroy(struct virtual_s * instance)
+{
+   if (instance)
+   {
+      free(instance->pixels);
+   }
+
+   free(instance);
+}
+
+bool virtual_coords_out_of_bounds(struct virtual_s * instance, int x, int y)
+{
+   return (
+      NULL == instance ||
+      x < 0 ||
+      x >= instance->width ||
+      y < 0 ||
+      y >= instance->height
+   ) ? true : false;
+}
+
+bool virtual_2d_coords_to_linear(struct virtual_s * instance, int x, int y, int * out_linear)
+{
+   if (NULL == instance || NULL == out_linear || virtual_coords_out_of_bounds(instance, x, y)) return false;
+
+   *out_linear = (y * instance->width) + x;
+
+   return true;
+}
+
+bool virtual_plot_pixel(struct virtual_s * instance, int x, int y, color_rgba_t color)
+{
+   int pixel_index;
+   if (virtual_2d_coords_to_linear(instance, x, y, &pixel_index))
+   {
+      instance->pixels[pixel_index] = color;
+      return true;
+   }
+
+   return false;
+}
+
+struct virtual_s * virtual_make(color_rgba_t clear_color, int width, int height)
+{
+   // Allocate instance
+   struct virtual_s * instance = malloc(sizeof(struct virtual_s));
+   if (NULL == instance)
+   {
+      printf("\nFailed to allocate virtual instance");
+      return NULL;
+   }
+
+   // Allocate offline pixels
+   const int VIRTUAL_PIXEL_COUNT = width * height;
+   instance->pixels = malloc(sizeof(color_rgba_t) * VIRTUAL_PIXEL_COUNT);
+   if (NULL == instance->pixels)
+   {
+      printf("\nFailed to allocate virtual pixels");
+      free(instance);
+      return NULL;
+   }
+
+   // Finish instance
+   instance->width = width;
+   instance->height = height;
+
+   // Clear pixels
+   virtual_clear_pixels(instance, clear_color);
+
+   // Success setting up virtual instance
+   return instance;
+}
+/*
+   > render_sprite(x, y, type, buffer, virtual dimensions)
+      - tiled and non-tiled ?
+      - various sizes at 8x8 and higher dimensions ?
+
+   > virtual render target
+      - virtual size
+      - rgba buffer
+
+   > rendering
+      render_sprite_into(vrt, x, y, type)
+
+   > What is a sprite ?
+      - specific texture -> texels
+      - sprite dimensions
+      - type ?
+*/
+
 // Logic - Main
 int main(int argc, char * argv[])
 {
@@ -163,23 +282,25 @@ int main(int argc, char * argv[])
       return EXIT_FAILURE;
    }
 
+   // Enable renderer VSYNC
+   const bool SUCCESS_USE_VSYNC = SDL_SetRenderVSync(sdl_renderer, 1);
+
    // Create offline rendering texture
-   const struct vec_2i_s VIRTUAL_WINDOW_SIZE = vec_2i_make_xy(160, 144);
-   const int VIRTUAL_PIXEL_COUNT = VIRTUAL_WINDOW_SIZE.x * VIRTUAL_WINDOW_SIZE.y;
-   color_rgba_t * offline_pixels = malloc(sizeof(color_rgba_t) * VIRTUAL_PIXEL_COUNT);
-   if (NULL == offline_pixels)
+   struct virtual_s * virtual = virtual_make(color_rgba_make_rgba(0, 0, 0, 0xFF), 160, 144);
+   if (NULL == virtual)
    {
-      printf("\nFailed to allocate [%d] offline pixels", VIRTUAL_PIXEL_COUNT);
+      printf("\nFailed to create virtual");
       return EXIT_FAILURE;
    }
+   const struct vec_2i_s VIRTUAL_SIZE = virtual_size(virtual);
 
    // Create online rendering texture
    SDL_Texture * sdl_texture_online = SDL_CreateTexture(
       sdl_renderer,
       SDL_PIXELFORMAT_RGBA8888,
       SDL_TEXTUREACCESS_STREAMING,
-      VIRTUAL_WINDOW_SIZE.x,
-      VIRTUAL_WINDOW_SIZE.y
+      VIRTUAL_SIZE.x,
+      VIRTUAL_SIZE.y
    );
    if (NULL == sdl_texture_online)
    {
@@ -196,8 +317,10 @@ int main(int argc, char * argv[])
    }
 
    // Log engine status
+   const int DW = 20;
    printf("\n\nEngine Information");
-   printf("\n\t%-15s: %s", "resource directory", DIR_ABS_RES);
+   printf("\n\t%-*s: %s", DW, "resource directory", DIR_ABS_RES);
+   printf("\n\t%-*s: %s", DW, "VSYNC", SUCCESS_USE_VSYNC ? "enabled" : "disabled");
 
    // FPS counter
    int frames_per_second = 0;
@@ -219,17 +342,23 @@ int main(int argc, char * argv[])
       }
 
       // Render into offline texture
-      for (int i = 0; i < VIRTUAL_PIXEL_COUNT; ++i)
+      // -> Clear
+      virtual_clear_pixels(virtual, color_rgba_make_rgba(15, 15, 15, 255));
+      // -> Render scene
+      for (int y = 0; y < VIRTUAL_SIZE.y; ++y)
       {
-         offline_pixels[i] = color_rgba_make_rgba(rand() % 256, rand() % 256, rand() % 256, 0xFF);
+         for (int x = 0; x < VIRTUAL_SIZE.x; ++x)
+         {
+            virtual_plot_pixel(virtual, x, y, color_rgba_make_rgba(rand() % 256, 0x00, 0x00, 0xFF));
+         }
       }
 
       // Copy offline to online texture
       const bool SUCCESS_UPDATE_TEXTURE = SDL_UpdateTexture(
          sdl_texture_online,
          NULL,
-         offline_pixels,
-         sizeof(color_rgba_t) * VIRTUAL_WINDOW_SIZE.x
+         virtual->pixels,
+         sizeof(color_rgba_t) * VIRTUAL_SIZE.x
       );
 
       // Clear backbuffer
@@ -242,7 +371,7 @@ int main(int argc, char * argv[])
       }
 
       // Render scaled virtual texture
-      const SDL_FRect VIRTUAL_REGION = help_virtual_max_render_scale_region(help_sdl_window_size(sdl_window), VIRTUAL_WINDOW_SIZE);
+      const SDL_FRect VIRTUAL_REGION = help_virtual_max_render_scale_region(help_sdl_window_size(sdl_window), VIRTUAL_SIZE);
       const bool SUCCESS_RENDER_TEXTURE = SDL_RenderTexture(
          sdl_renderer,
          sdl_texture_online,
@@ -278,7 +407,7 @@ int main(int argc, char * argv[])
    }
 
    // Cleanup custom
-   free(offline_pixels);
+   virtual_destroy(virtual);
 
    // Cleanup SDL
    SDL_DestroyTexture(sdl_texture_online);

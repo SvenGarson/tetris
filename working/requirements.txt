@@ -32,10 +32,6 @@ Simple building for windows
    - music
    - sfx
 
-gcc
-ROOT\\main.c ROOT\\other.c ROOT\\etc.c
--L C:\dev\libraries\SDL3-3.2.6\i686-w64-mingw32\lib
--I ROOT\\include
--I C:\dev\libraries\SDL3-3.2.6\i686-w64-mingw32\include
--lSDL3
--o ROOT\\build\\Tetris
+# Feature features
+> limit framerate when VSYNC not supported or disabled
+   - https://lazyfoo.net/tutorials/SDL3/12-frame-rate-and-vsync/index.php
