@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
 
 // Constants
 const char * ARG_KEY_DIR_ABS_RES = "-abs_res_dir";
@@ -320,6 +321,20 @@ int main(int argc, char * argv[])
    if (!SUCCESS_TEXTURE_NEAREST)
    {
       printf("\nFailed to set online texture filtering to nearest - Error: %s", SDL_GetError());
+      return EXIT_FAILURE;
+   }
+
+   // Load required resources
+   char dir_abs_res_images[1024];;
+   snprintf(dir_abs_res_images, sizeof(dir_abs_res_images), "%s\\images\\", DIR_ABS_RES);
+
+   char dir_abs_res_img_tiles[1024];
+   const char * TILES_IMAGE_FILE_NAME = "tiles.png";
+   snprintf(dir_abs_res_img_tiles, sizeof(dir_abs_res_img_tiles), "%s\\%s", dir_abs_res_images, TILES_IMAGE_FILE_NAME);
+   SDL_Surface * img_tiles = IMG_Load(dir_abs_res_img_tiles);
+   if (NULL == img_tiles)
+   {
+      printf("\nFailed to load tiles image [%s] from resources [%s]", TILES_IMAGE_FILE_NAME, dir_abs_res_images);
       return EXIT_FAILURE;
    }
 

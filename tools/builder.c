@@ -121,6 +121,23 @@ int main(int argc, char * argv[])
    printf("\n\t%-15s: %s", "include", str_dir_abs_sdl_include);
    printf("\n\t%-15s: %s", "lib", str_dir_abs_sdl_lib);
 
+   // Prepare SDL3 image library directories
+   const char * STR_DIR_ABS_SDL_IMAGE_ROOT = "C:\\dev\\libraries\\SDL3_image-3.2.2\\i686-w64-mingw32";
+
+   char str_dir_abs_sdl_image_bin[1024];
+   char str_dir_abs_sdl_image_include[1024];
+   char str_dir_abs_sdl_image_lib[1024];
+
+   snprintf(str_dir_abs_sdl_image_bin, sizeof(str_dir_abs_sdl_image_bin), "%s\\%s", STR_DIR_ABS_SDL_IMAGE_ROOT, "bin");
+   snprintf(str_dir_abs_sdl_image_include, sizeof(str_dir_abs_sdl_image_include), "%s\\%s", STR_DIR_ABS_SDL_IMAGE_ROOT, "include");
+   snprintf(str_dir_abs_sdl_image_lib, sizeof(str_dir_abs_sdl_image_lib), "%s\\%s", STR_DIR_ABS_SDL_IMAGE_ROOT, "lib");
+
+   printf("\n\n# SDL Image Directories");
+   printf("\n\t%-15s: %s", "root", STR_DIR_ABS_SDL_IMAGE_ROOT);
+   printf("\n\t%-15s: %s", "bin", str_dir_abs_sdl_image_bin);
+   printf("\n\t%-15s: %s", "include", str_dir_abs_sdl_image_include);
+   printf("\n\t%-15s: %s", "lib", str_dir_abs_sdl_image_lib);
+
    // Prepare list of source files to compile
    char * SOURCE_FILES[] = { "main.c" };
    char str_root_source[1024];
@@ -169,10 +186,12 @@ int main(int argc, char * argv[])
    snprintf(
       str_compilation,
       sizeof(str_compilation),
-      "gcc %s -L%s -I%s -I%s -lSDL3 -o %s%s\\%s",
+      "gcc %s -L%s -L%s -I%s -I%s -I%s -lSDL3 -lSDL3_image -o %s%s\\%s",
       STR_SOURCES,
       str_dir_abs_sdl_lib,
+      str_dir_abs_sdl_image_lib,
       str_dir_abs_sdl_include,
+      str_dir_abs_sdl_image_include,
       str_dir_abs_include,
       DIR_ABS_ROOT,
       "build",
@@ -191,11 +210,11 @@ int main(int argc, char * argv[])
       return EXIT_FAILURE;
    }
 
-   // Pull in executable dependencies
-   char str_copy_exec_dependencies[2048];
+   // Pull in SDL3 executable dependencies
+   char str_copy_SDL3_exec_dependencies[2048];
    snprintf(
-      str_copy_exec_dependencies,
-      sizeof(str_copy_exec_dependencies),
+      str_copy_SDL3_exec_dependencies,
+      sizeof(str_copy_SDL3_exec_dependencies),
       "copy %s\\SDL3.dll %s%s /y",
       str_dir_abs_sdl_bin,
       DIR_ABS_ROOT,
@@ -203,14 +222,37 @@ int main(int argc, char * argv[])
    );
 
    printf("\n\n# Pull Executable Dependencies\n");
-   const bool SUCCESS_PULL_EXEC_DEPENDENCIES = system(str_copy_exec_dependencies) == 0;
+   const bool SUCCESS_PULL_EXEC_DEPENDENCIES = system(str_copy_SDL3_exec_dependencies) == 0;
    if (SUCCESS_PULL_EXEC_DEPENDENCIES)
    {
-      printf("\n\tPulled in executable dependencies successfully");
+      printf("\n\tPulled in SDL3 executable dependencies successfully");
    }
    else
    {
-      printf("\n\tFailed to pull in executable dependencies - Exiting ...");
+      printf("\n\tFailed to pull in SDL3 executable dependencies - Exiting ...");
+      return EXIT_FAILURE;
+   }
+
+   // Pull in SDL3 image executable dependencies
+   char str_copy_SDL3_image_exec_dependencies[2048];
+   snprintf(
+      str_copy_SDL3_image_exec_dependencies,
+      sizeof(str_copy_SDL3_image_exec_dependencies),
+      "copy %s\\SDL3_image.dll %s%s /y",
+      str_dir_abs_sdl_image_bin,
+      DIR_ABS_ROOT,
+      "build"
+   );
+
+   printf("\n\n# Pull Executable Dependencies\n");
+   const bool SUCCESS_PULL_IMAGE_EXEC_DEPENDENCIES = system(str_copy_SDL3_image_exec_dependencies) == 0;
+   if (SUCCESS_PULL_IMAGE_EXEC_DEPENDENCIES)
+   {
+      printf("\n\tPulled in SDL3 image executable dependencies successfully");
+   }
+   else
+   {
+      printf("\n\tFailed to pull in SDL3 image executable dependencies - Exiting ...");
       return EXIT_FAILURE;
    }
 
