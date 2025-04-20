@@ -140,6 +140,13 @@ int main(int argc, char * argv[])
       return EXIT_FAILURE;
    }
 
+   // Initialize SDL
+   if (!SDL_Init(SDL_INIT_VIDEO))
+   {
+      printf("\nFailed to initialize SDL - Error: %s", SDL_GetError());
+      return EXIT_FAILURE;
+   }
+
    // Create SDL window
    SDL_Window * sdl_window = SDL_CreateWindow("Tetris", 0, 0, SDL_WINDOW_FULLSCREEN);
    if (NULL == sdl_window)
@@ -157,7 +164,7 @@ int main(int argc, char * argv[])
    }
 
    // Create offline rendering texture
-   const struct vec_2i_s VIRTUAL_WINDOW_SIZE = vec_2i_make_xy(100, 500);
+   const struct vec_2i_s VIRTUAL_WINDOW_SIZE = vec_2i_make_xy(160, 144);
    const int VIRTUAL_PIXEL_COUNT = VIRTUAL_WINDOW_SIZE.x * VIRTUAL_WINDOW_SIZE.y;
    color_rgba_t * offline_pixels = malloc(sizeof(color_rgba_t) * VIRTUAL_PIXEL_COUNT);
    if (NULL == offline_pixels)
@@ -221,7 +228,7 @@ int main(int argc, char * argv[])
       );
 
       // Clear backbuffer
-      SDL_SetRenderDrawColor(sdl_renderer, 50, 150, 250, 0xFF);
+      SDL_SetRenderDrawColor(sdl_renderer, 10, 10, 10, 0xFF);
       const bool SUCCESS_BACKBUFFER_CLEAR = SDL_RenderClear(sdl_renderer);
       if (!SUCCESS_BACKBUFFER_CLEAR)
       {
@@ -229,9 +236,8 @@ int main(int argc, char * argv[])
          break;
       }
 
-      // Determine scaled virtual canvas
-      const SDL_FRect VIRTUAL_REGION = help_virtual_max_render_scale_region(help_sdl_window_size(sdl_window), VIRTUAL_WINDOW_SIZE);
       // Render scaled virtual texture
+      const SDL_FRect VIRTUAL_REGION = help_virtual_max_render_scale_region(help_sdl_window_size(sdl_window), VIRTUAL_WINDOW_SIZE);
       const bool SUCCESS_RENDER_TEXTURE = SDL_RenderTexture(
          sdl_renderer,
          sdl_texture_online,
