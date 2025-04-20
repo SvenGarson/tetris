@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <SDL3/SDL.h>
 
+// Constants
+const char * ARG_KEY_DIR_ABS_RES = "-abs_res_dir";
+
 // Helpers - Arguments
 const char * help_args_key_value_first(int argc, char * argv[], const char * key)
 {
@@ -45,8 +48,86 @@ color_rgba_t color_rgba_make_rgba(uint8_t red, uint8_t green, uint8_t blue, uint
    return color;
 }
 
-// Constants
-const char * ARG_KEY_DIR_ABS_RES = "-abs_res_dir";
+// Helpers - Vectors
+struct vec_2i_s {
+   int x;
+   int y;
+};
+
+struct vec_2i_s vec_2i_make_xy(int x, int y)
+{
+   struct vec_2i_s v;
+
+   v.x = x;
+   v.y = y;
+
+   return v;
+}
+
+struct vec_2i_s vec_2i_make_from_scaled(struct vec_2i_s v, int scale)
+{
+   return vec_2i_make_xy(
+      v.x * scale,
+      v.y * scale
+   );
+}
+
+// Helpers - SDL
+struct vec_2i_s help_sdl_window_size(SDL_Window * sdl_window)
+{
+   int width, height;
+   if (SDL_GetWindowSize(sdl_window, &width, &height))
+   {
+      return vec_2i_make_xy(width, height);
+   }
+   else
+   {
+      return vec_2i_make_xy(0, 0);
+   }
+}
+
+SDL_FRect help_sdl_f_rect_make(float x, float y, float width, float height)
+{
+   SDL_FRect frect;
+
+   frect.x = x;
+   frect.y = y;
+   frect.w = width;
+   frect.h = height;
+
+   return frect;
+}
+
+// Helpers - Min Max
+int help_minmax_min_2i(int a, int b)
+{
+   return (a < b) ? a : b;
+}
+
+int help_minmax_max_2i(int a, int b)
+{
+   return (a > b) ? a : b;
+}
+
+// Helpers - Virtual
+int help_virtual_max_render_scale(struct vec_2i_s actual_window_size, struct vec_2i_s virtual_window_size)
+{
+   const int MAX_RENDER_SCALE_HORIZONTAL = actual_window_size.x / virtual_window_size.x;
+   const int MAX_RENDER_SCALE_VERTICAL = actual_window_size.y / virtual_window_size.y;
+   return help_minmax_min_2i(MAX_RENDER_SCALE_HORIZONTAL, MAX_RENDER_SCALE_VERTICAL);
+}
+
+SDL_FRect help_virtual_max_render_scale_region(struct vec_2i_s actual_window_size, struct vec_2i_s virtual_window_size)
+{
+   const int MAX_RENDER_SCALE = help_virtual_max_render_scale(actual_window_size, virtual_window_size);
+   const struct vec_2i_s VIRTUAL_WINDOW_SIZE_SCALED = vec_2i_make_from_scaled(virtual_window_size, MAX_RENDER_SCALE);
+   return help_sdl_f_rect_make(
+      (actual_window_size.x - VIRTUAL_WINDOW_SIZE_SCALED.x) * 0.5f,
+      (actual_window_size.y - VIRTUAL_WINDOW_SIZE_SCALED.y) * 0.5f,
+      VIRTUAL_WINDOW_SIZE_SCALED.x,
+      VIRTUAL_WINDOW_SIZE_SCALED.y
+   );
+}
 
 // Logic - Main
 int main(int argc, char * argv[])
@@ -76,9 +157,8 @@ int main(int argc, char * argv[])
    }
 
    // Create offline rendering texture
-   const int VIRTUAL_WIDTH = 15;
-   const int VIRTUAL_HEIGHT = 10;
-   const int VIRTUAL_PIXEL_COUNT = VIRTUAL_WIDTH * VIRTUAL_HEIGHT;
+   const struct vec_2i_s VIRTUAL_WINDOW_SIZE = vec_2i_make_xy(100, 500);
+   const int VIRTUAL_PIXEL_COUNT = VIRTUAL_WINDOW_SIZE.x * VIRTUAL_WINDOW_SIZE.y;
    color_rgba_t * offline_pixels = malloc(sizeof(color_rgba_t) * VIRTUAL_PIXEL_COUNT);
    if (NULL == offline_pixels)
    {
@@ -91,8 +171,8 @@ int main(int argc, char * argv[])
       sdl_renderer,
       SDL_PIXELFORMAT_RGBA8888,
       SDL_TEXTUREACCESS_STREAMING,
-      VIRTUAL_WIDTH,
-      VIRTUAL_HEIGHT
+      VIRTUAL_WINDOW_SIZE.x,
+      VIRTUAL_WINDOW_SIZE.y
    );
    if (NULL == sdl_texture_online)
    {
@@ -137,7 +217,7 @@ int main(int argc, char * argv[])
          sdl_texture_online,
          NULL,
          offline_pixels,
-         sizeof(color_rgba_t) * VIRTUAL_WIDTH
+         sizeof(color_rgba_t) * VIRTUAL_WINDOW_SIZE.x
       );
 
       // Clear backbuffer
@@ -149,18 +229,14 @@ int main(int argc, char * argv[])
          break;
       }
 
+      // Determine scaled virtual canvas
+      const SDL_FRect VIRTUAL_REGION = help_virtual_max_render_scale_region(help_sdl_window_size(sdl_window), VIRTUAL_WINDOW_SIZE);
       // Render scaled virtual texture
-      const int SCALE = 50;
-      SDL_FRect dest;
-      dest.x = 0;
-      dest.y = 0;
-      dest.w = VIRTUAL_WIDTH * SCALE;
-      dest.h = VIRTUAL_HEIGHT * SCALE;
       const bool SUCCESS_RENDER_TEXTURE = SDL_RenderTexture(
          sdl_renderer,
          sdl_texture_online,
          NULL,
-         &dest
+         &VIRTUAL_REGION
       );
       if (!SUCCESS_RENDER_TEXTURE)
       {
