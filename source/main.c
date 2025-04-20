@@ -199,6 +199,11 @@ int main(int argc, char * argv[])
    printf("\n\nEngine Information");
    printf("\n\t%-15s: %s", "resource directory", DIR_ABS_RES);
 
+   // FPS counter
+   int frames_per_second = 0;
+   uint64_t timer_fps_ns = SDL_GetTicksNS();
+   const uint64_t NS_PER_S = 1000000000;
+
    // Game loop
    bool tetris_close_requested = false;
    while (false == tetris_close_requested)
@@ -257,6 +262,19 @@ int main(int argc, char * argv[])
          printf("\nFailed to render - Error: %s", SDL_GetError());
          break;
       }
+
+      // Determine FPS
+      if (SDL_GetTicksNS() >= (timer_fps_ns + NS_PER_S))
+      {
+         printf("\nFPS: %d", frames_per_second);
+
+         // Reset FPS timer
+         frames_per_second = 0;
+         timer_fps_ns = SDL_GetTicksNS();
+      }
+
+      // Count frames executed
+      ++frames_per_second;
    }
 
    // Cleanup custom
