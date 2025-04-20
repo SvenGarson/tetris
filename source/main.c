@@ -130,46 +130,48 @@ SDL_FRect help_virtual_max_render_scale_region(struct vec_2i_s actual_window_siz
    );
 }
 
-// Helpers - Virtual Rendering
-struct virtual_s {
-   color_rgba_t * pixels;
+// Helpers - Texture
+struct texture_rgba_s {
+   color_rgba_t * texels;
    int width;
    int height;
 };
 
-int virtual_pixel_count(struct virtual_s * instance)
+int help_texture_rgba_texel_count(struct texture_rgba_s * instance)
 {
    return instance ? (instance->width * instance->height) : 0;
 }
 
-bool virtual_clear_pixels(struct virtual_s * instance, color_rgba_t clear_color)
+struct vec_2i_s help_texture_rgba_size(struct texture_rgba_s * instance)
+{
+   return instance ? vec_2i_make_xy(instance->width, instance->height) : vec_2i_make_xy(0, 0);
+}
+
+void * help_texture_rgba_destroy(struct texture_rgba_s * instance)
+{
+   if (instance)
+   {
+      free(instance->texels);
+   }
+
+   free(instance);
+
+   return NULL;
+}
+
+bool help_texture_rgba_clear(struct texture_rgba_s * instance, color_rgba_t clear_color)
 {
    if (NULL == instance) return false;
 
-   for (int i = 0; i < virtual_pixel_count(instance); ++i)
+   for (int i = 0; i < help_texture_rgba_texel_count(instance); ++i)
    {
-      instance->pixels[i] = clear_color;
+      instance->texels[i] = clear_color;
    }
 
    return true;
 }
 
-struct vec_2i_s virtual_size(struct virtual_s * instance)
-{
-   return instance ? vec_2i_make_xy(instance->width, instance->height) : vec_2i_make_xy(0, 0);
-}
-
-void virtual_destroy(struct virtual_s * instance)
-{
-   if (instance)
-   {
-      free(instance->pixels);
-   }
-
-   free(instance);
-}
-
-bool virtual_coords_out_of_bounds(struct virtual_s * instance, int x, int y)
+bool help_texture_rgba_coords_out_of_bounds(struct texture_rgba_s * instance, int x, int y)
 {
    return (
       NULL == instance ||
@@ -180,57 +182,61 @@ bool virtual_coords_out_of_bounds(struct virtual_s * instance, int x, int y)
    ) ? true : false;
 }
 
-bool virtual_2d_coords_to_linear(struct virtual_s * instance, int x, int y, int * out_linear)
+bool help_texture_rgba_2d_coords_to_linear(struct texture_rgba_s * instance, int x, int y, int * out_linear)
 {
-   if (NULL == instance || NULL == out_linear || virtual_coords_out_of_bounds(instance, x, y)) return false;
+   if (
+      NULL == instance ||
+      NULL == out_linear ||
+      help_texture_rgba_coords_out_of_bounds(instance, x, y)
+   ) return false;
 
    *out_linear = (y * instance->width) + x;
-
    return true;
 }
 
-bool virtual_plot_pixel(struct virtual_s * instance, int x, int y, color_rgba_t color)
+bool help_texture_rgba_plot_pixel(struct texture_rgba_s * instance, int x, int y, color_rgba_t color)
 {
-   int pixel_index;
-   if (virtual_2d_coords_to_linear(instance, x, y, &pixel_index))
+   int texel_index;
+   if (help_texture_rgba_2d_coords_to_linear(instance, x, y, &texel_index))
    {
-      instance->pixels[pixel_index] = color;
+      instance->texels[texel_index] = color;
       return true;
    }
 
    return false;
 }
 
-struct virtual_s * virtual_make(color_rgba_t clear_color, int width, int height)
+struct texture_rgba_s * help_texture_rgba_make(int width, int height, color_rgba_t clear_color)
 {
    // Allocate instance
-   struct virtual_s * instance = malloc(sizeof(struct virtual_s));
+   struct texture_rgba_s * instance = malloc(sizeof(struct texture_rgba_s));
    if (NULL == instance)
    {
-      printf("\nFailed to allocate virtual instance");
+      printf("\nFailed to create texture rgba instance");
       return NULL;
    }
 
-   // Allocate offline pixels
-   const int VIRTUAL_PIXEL_COUNT = width * height;
-   instance->pixels = malloc(sizeof(color_rgba_t) * VIRTUAL_PIXEL_COUNT);
-   if (NULL == instance->pixels)
-   {
-      printf("\nFailed to allocate virtual pixels");
-      free(instance);
-      return NULL;
-   }
-
-   // Finish instance
+   // Null instance
+   instance->texels = NULL;
    instance->width = width;
    instance->height = height;
 
-   // Clear pixels
-   virtual_clear_pixels(instance, clear_color);
+   // Allocate texels
+   const int TEXEL_COUNT = width * height;
+   instance->texels = malloc(sizeof(color_rgba_t) * TEXEL_COUNT);
+   if (NULL == instance->texels)
+   {
+      printf("\nFailed to allocate texture rgba for [%s] texels", TEXEL_COUNT);
+      return help_texture_rgba_destroy(instance);
+   }
 
-   // Success setting up virtual instance
+   // Initial clear
+   help_texture_rgba_clear(instance, clear_color);
+
+   // Success
    return instance;
 }
+
 /*
    > render_sprite(x, y, type, buffer, virtual dimensions)
       - tiled and non-tiled ?
@@ -293,14 +299,14 @@ int main(int argc, char * argv[])
    // Enable renderer VSYNC
    const bool SUCCESS_USE_VSYNC = SDL_SetRenderVSync(sdl_renderer, 1);
 
-   // Create offline rendering texture
-   struct virtual_s * virtual = virtual_make(color_rgba_make_rgba(0, 0, 0, 0xFF), 160, 144);
-   if (NULL == virtual)
+   // Create offline rendering resources
+   struct texture_rgba_s * tex_virtual = help_texture_rgba_make(160, 144, color_rgba_make_rgba(0x00, 0x00, 0x00, 0xFF));
+   if (NULL == tex_virtual)
    {
-      printf("\nFailed to create virtual");
+      printf("\nFailed to create virtual texture");
       return EXIT_FAILURE;
    }
-   const struct vec_2i_s VIRTUAL_SIZE = virtual_size(virtual);
+   const struct vec_2i_s VIRTUAL_SIZE = help_texture_rgba_size(tex_virtual);
 
    // Create online rendering texture
    SDL_Texture * sdl_texture_online = SDL_CreateTexture(
@@ -325,7 +331,7 @@ int main(int argc, char * argv[])
    }
 
    // Load required resources
-   char dir_abs_res_images[1024];;
+   char dir_abs_res_images[1024];
    snprintf(dir_abs_res_images, sizeof(dir_abs_res_images), "%s\\images\\", DIR_ABS_RES);
 
    char dir_abs_res_img_tiles[1024];
@@ -365,13 +371,13 @@ int main(int argc, char * argv[])
 
       // Render into offline texture
       // -> Clear
-      virtual_clear_pixels(virtual, color_rgba_make_rgba(15, 15, 15, 255));
+      help_texture_rgba_clear(tex_virtual, color_rgba_make_rgba(15, 15, 15, 255));
       // -> Render scene
       for (int y = 0; y < VIRTUAL_SIZE.y; ++y)
       {
          for (int x = 0; x < VIRTUAL_SIZE.x; ++x)
          {
-            virtual_plot_pixel(virtual, x, y, color_rgba_make_rgba(rand() % 256, 0x00, 0x00, 0xFF));
+            help_texture_rgba_plot_pixel(tex_virtual, x, y, color_rgba_make_rgba(rand() % 256, 0x00, 0x00, 0xFF));
          }
       }
 
@@ -379,7 +385,7 @@ int main(int argc, char * argv[])
       const bool SUCCESS_UPDATE_TEXTURE = SDL_UpdateTexture(
          sdl_texture_online,
          NULL,
-         virtual->pixels,
+         tex_virtual->texels,
          sizeof(color_rgba_t) * VIRTUAL_SIZE.x
       );
 
@@ -429,7 +435,7 @@ int main(int argc, char * argv[])
    }
 
    // Cleanup custom
-   virtual_destroy(virtual);
+   help_texture_rgba_destroy(tex_virtual);
 
    // Cleanup SDL
    SDL_DestroyTexture(sdl_texture_online);
