@@ -771,6 +771,14 @@ bool help_input_key_released(struct input_s * input, enum custom_key_e key)
    return help_input_key_in_state(input, key, KEY_STATE_RELEASED);
 }
 
+bool help_input_key_pressed_or_held(struct input_s * input, enum custom_key_e key)
+{
+   return (
+      help_input_key_in_state(input, key, KEY_STATE_PRESSED) ||
+      help_input_key_in_state(input, key, KEY_STATE_HELD)
+   );
+}
+
 // Helper - Field
 #define FIELD_WIDTH (10)
 #define FIELD_HEIGHT (18)
@@ -934,6 +942,7 @@ int main(int argc, char * argv[])
 
    // Sub-tick timers
    double last_time_tetro_drop = help_sdl_time_in_seconds();
+   double last_time_tetro_move_hori = help_sdl_time_in_seconds();
 
    // Game loop
    bool tetris_close_requested = false;
@@ -968,7 +977,98 @@ int main(int argc, char * argv[])
 
          // Tick engine (time simulated, fixed delta time, blend factor)
          
-         // Drop tetro
+         // ---> Move tetro
+         const double TIMER_TETRO_MOVE_HORI = 0.2;
+         const bool HORZONTAL_MOVEMENT_POSSIBLE = help_sdl_time_in_seconds() >= (last_time_tetro_move_hori + TIMER_TETRO_MOVE_HORI);
+         bool horizontal_movement_made = false;
+         if (help_input_key_pressed_or_held(input, CUSTOM_KEY_LEFT) && HORZONTAL_MOVEMENT_POSSIBLE)
+         {
+            // Don't move on collision on design from left
+            bool left_move_collision_occured = false;
+            for (int ty = 0; ty < tetro_active.data.size; ++ty)
+            {
+               for (int tx = 0; tx < tetro_active.data.size; ++tx)
+               {
+                  const bool TETRO_DESIGN_CELL_PLOTTED = tetro_active.data.design[tx][ty];
+                  if (false == TETRO_DESIGN_CELL_PLOTTED) continue;
+
+                  // Any overlap causes the tetro to be dropped
+                  // Check for collision one block under the current design position
+                  const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
+                     tetro_active.tile_pos.x + tx - 1, // Sweep left
+                     tetro_active.tile_pos.y + ty
+                  );
+
+                  // Collision with occupied cell or out-of-field bounds ?
+                  const bool OUT_OF_BOUNDS_COLLISION = help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y);
+                  const bool FIELD_CELL_OCCUPIED = field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y].occupied;
+                  if (OUT_OF_BOUNDS_COLLISION || FIELD_CELL_OCCUPIED)
+                  {
+                     // Break out of both loops more cleany - As we know the rotation is not possible
+                     left_move_collision_occured = true;
+                  }
+               }
+            }
+
+            // Make move ?
+            if (false == left_move_collision_occured)
+            {
+               --tetro_active.tile_pos.x;
+            }
+
+            // Movement made
+            horizontal_movement_made = true;
+         }
+         else if (help_input_key_pressed_or_held(input, CUSTOM_KEY_RIGHT) && HORZONTAL_MOVEMENT_POSSIBLE)
+         {
+            // Don't move on collision on design from right
+            bool right_move_collision_occured = false;
+            for (int ty = 0; ty < tetro_active.data.size; ++ty)
+            {
+               for (int tx = 0; tx < tetro_active.data.size; ++tx)
+               {
+                  const bool TETRO_DESIGN_CELL_PLOTTED = tetro_active.data.design[tx][ty];
+                  if (false == TETRO_DESIGN_CELL_PLOTTED) continue;
+
+                  // Any overlap causes the tetro to be dropped
+                  // Check for collision one block under the current design position
+                  const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
+                     tetro_active.tile_pos.x + tx + 1, // Sweep right
+                     tetro_active.tile_pos.y + ty
+                  );
+
+                  // Collision with occupied cell or out-of-field bounds ?
+                  const bool OUT_OF_BOUNDS_COLLISION = help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y);
+                  const bool FIELD_CELL_OCCUPIED = field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y].occupied;
+                  if (OUT_OF_BOUNDS_COLLISION || FIELD_CELL_OCCUPIED)
+                  {
+                     // Break out of both loops more cleany - As we know the rotation is not possible
+                     right_move_collision_occured = true;
+                  }
+               }
+            }
+
+            // Make move ?
+            if (false == right_move_collision_occured)
+            {
+               ++tetro_active.tile_pos.x;
+            }
+
+            // Movement made
+            horizontal_movement_made = true;
+
+            // Movement made
+            horizontal_movement_made = true;
+         }
+
+         // Update horizontal movement timer
+         if (horizontal_movement_made)
+         {
+            // Update horizontal movement timer
+            last_time_tetro_move_hori = help_sdl_time_in_seconds();
+         }
+
+         // ---> Drop tetro
          const double TIMER_TETRO_DROP = 1.0f;
          if (help_sdl_time_in_seconds() >= (last_time_tetro_drop + TIMER_TETRO_DROP))
          {
@@ -1032,24 +1132,7 @@ int main(int argc, char * argv[])
          }
       }
 
-      // TODO-GS: Move input into tick region
-      // ----> Rotate active tetro
-      if (help_input_key_pressed(input, CUSTOM_KEY_UP))
-      {
-         ++tetro_active.tile_pos.y;
-      }
-      if (help_input_key_pressed(input, CUSTOM_KEY_DOWN))
-      {
-         --tetro_active.tile_pos.y;
-      }
-      if (help_input_key_pressed(input, CUSTOM_KEY_LEFT))
-      {
-         --tetro_active.tile_pos.x;
-      }
-      if (help_input_key_pressed(input, CUSTOM_KEY_RIGHT))
-      {
-         ++tetro_active.tile_pos.x;
-      }
+      // TODO-GS: Move rest of input into Tick phase
       if (help_input_key_pressed(input, CUSTOM_KEY_B))
       {
          // Rotate only when possible
@@ -1106,10 +1189,6 @@ int main(int argc, char * argv[])
             }
          }
          if (false == right_collision_occured) help_tetro_world_rotate_right(&tetro_active);
-      }
-      if (help_input_key_pressed(input, CUSTOM_KEY_START))
-      {
-         // TODO-GS: Pause game
       }
 
       // Render into offline texture
