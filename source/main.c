@@ -972,6 +972,59 @@ int main(int argc, char * argv[])
          const double TIMER_TETRO_DROP = 1.0f;
          if (help_sdl_time_in_seconds() >= (last_time_tetro_drop + TIMER_TETRO_DROP))
          {
+            // Action - Drop tetro
+            bool drop_collision_occured = false;
+            for (int ty = 0; ty < tetro_active.data.size; ++ty)
+            {
+               for (int tx = 0; tx < tetro_active.data.size; ++tx)
+               {
+                  const bool TETRO_DESIGN_CELL_PLOTTED = tetro_active.data.design[tx][ty];
+                  if (false == TETRO_DESIGN_CELL_PLOTTED) continue;
+
+                  // Any overlap causes the tetro to be dropped
+                  // Check for collision one block under the current design position
+                  const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
+                     tetro_active.tile_pos.x + tx,
+                     tetro_active.tile_pos.y + ty - 1
+                  );
+
+                  // Collision with occupied cell or out-of-field bounds ?
+                  const bool OUT_OF_BOUNDS_COLLISION = help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y);
+                  const bool FIELD_CELL_OCCUPIED = field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y].occupied;
+                  if (OUT_OF_BOUNDS_COLLISION || FIELD_CELL_OCCUPIED)
+                  {
+                     // Break out of both loops more cleany - As we know the rotation is not possible
+                     drop_collision_occured = true;
+                  }
+               }
+            }
+            if (drop_collision_occured)
+            {
+               // Drop the tetro because of drop collision
+               for (int ty = 0; ty < tetro_active.data.size; ++ty)
+               {
+                  for (int tx = 0; tx < tetro_active.data.size; ++tx)
+                  {
+                     if (tetro_active.data.design[tx][ty] == false) continue;
+
+                     // Drop this tetro cell in field space
+                     const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
+                        tetro_active.tile_pos.x + tx,
+                        tetro_active.tile_pos.y + ty
+                     );
+
+                     // Ignore invalid field cells
+                     if (help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y))
+                     {
+                        continue;
+                     }
+
+                     // Safe to place tetro cell
+                     field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y] = field_cell_make(tetro_active.data.type, true);
+                  }
+               }
+            }
+
             // TODO-GS: Drop tetro + design collision detection + placement
             --tetro_active.tile_pos.y;
             // Timer
@@ -979,7 +1032,7 @@ int main(int argc, char * argv[])
          }
       }
 
-      // TODO-GS: Convert to DT based ticking
+      // TODO-GS: Move input into tick region
       // ----> Rotate active tetro
       if (help_input_key_pressed(input, CUSTOM_KEY_UP))
       {
@@ -1056,29 +1109,7 @@ int main(int argc, char * argv[])
       }
       if (help_input_key_pressed(input, CUSTOM_KEY_START))
       {
-         // Place active tetro in place
-         for (int ty = 0; ty < tetro_active.data.size; ++ty)
-         {
-            for (int tx = 0; tx < tetro_active.data.size; ++tx)
-            {
-               if (tetro_active.data.design[tx][ty] == false) continue;
-
-               // Drop this tetro cell in field space
-               const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
-                  tetro_active.tile_pos.x + tx,
-                  tetro_active.tile_pos.y + ty
-               );
-
-               // Ignore invalid field cells
-               if (help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y))
-               {
-                  continue;
-               }
-
-               // Safe to place tetro cell
-               field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y] = field_cell_make(tetro_active.data.type, true);
-            }
-         }
+         // TODO-GS: Pause game
       }
 
       // Render into offline texture
