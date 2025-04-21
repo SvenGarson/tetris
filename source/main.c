@@ -226,6 +226,17 @@ bool help_texture_rgba_plot_texel(struct texture_rgba_s * instance, int x, int y
    return false;
 }
 
+void help_texture_rgba_plot_aabb(struct texture_rgba_s * instance, int min_x, int min_y, int width, int height, color_rgba_t color)
+{
+   for (int box_y = min_y; box_y < (min_y + height); ++box_y)
+   {
+      for (int box_x = min_x; box_x < (min_x + width); ++box_x)
+      {
+         help_texture_rgba_plot_texel(instance, box_x, box_y, color);
+      }
+   }
+}
+
 bool help_texture_rgba_access_texel(struct texture_rgba_s * instance, int x, int y, color_rgba_t * out_color)
 {
    if (NULL == instance || NULL == out_color) return false;
@@ -958,12 +969,13 @@ int main(int argc, char * argv[])
          for (int fx = 0; fx < FIELD_WIDTH; ++fx)
          {
             // Background
-            help_tex_sprite_render(
-               SPR_LIGHT,
+            help_texture_rgba_plot_aabb(
+               tex_virtual,
                fx * FIELD_TILE_SIZE,
                fy * FIELD_TILE_SIZE,
-               tex_sprites,
-               tex_virtual
+               FIELD_TILE_SIZE,
+               FIELD_TILE_SIZE,
+               color_rgba_make_rgba(125, 125, 125, 255)
             );
             
             // Placed cells
@@ -974,12 +986,13 @@ int main(int argc, char * argv[])
             }
 
             // Field occupied
-            help_tex_sprite_render(
-               SPR_DARKEST,
+            help_texture_rgba_plot_aabb(
+               tex_virtual,
                fx * FIELD_TILE_SIZE,
                fy * FIELD_TILE_SIZE,
-               tex_sprites,
-               tex_virtual
+               FIELD_TILE_SIZE,
+               FIELD_TILE_SIZE,
+               color_rgba_make_rgba(150, 50, 50, 255)
             );
          }
       }
@@ -989,12 +1002,13 @@ int main(int argc, char * argv[])
          for (int tx = 0; tx < tetro_active.data.size; ++tx)
          {
             if (tetro_active.data.design[tx][ty] == false) continue;
-            help_tex_sprite_render(
-               SPR_CELL,
+            help_texture_rgba_plot_aabb(
+               tex_virtual,
                tetro_active.position.x + tx * FIELD_TILE_SIZE,
                tetro_active.position.y + ty * FIELD_TILE_SIZE,
-               tex_sprites,
-               tex_virtual
+               FIELD_TILE_SIZE,
+               FIELD_TILE_SIZE,
+               color_rgba_make_rgba(50, 50, 150, 255)
             );
          }
       }
