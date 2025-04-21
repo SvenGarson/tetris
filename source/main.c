@@ -216,8 +216,10 @@ bool help_texture_rgba_2d_coords_to_linear(struct texture_rgba_s * instance, int
 
 bool help_texture_rgba_plot_texel(struct texture_rgba_s * instance, int x, int y, color_rgba_t color)
 {
+   const int FLIPPED_Y = help_texture_rgba_size(instance).y - 1 - y;
+
    int texel_index;
-   if (help_texture_rgba_2d_coords_to_linear(instance, x, y, &texel_index))
+   if (help_texture_rgba_2d_coords_to_linear(instance, x, FLIPPED_Y, &texel_index))
    {
       instance->texels[texel_index] = color;
       return true;
@@ -1099,6 +1101,11 @@ int main(int argc, char * argv[])
             }
          }
       }
+      // ----> Coordiante system
+      help_texture_rgba_plot_texel(tex_virtual, 0, 0, color_rgba_make_rgba(255, 0, 0, 255));
+      help_texture_rgba_plot_texel(tex_virtual, VIRTUAL_SIZE.x - 1, 0, color_rgba_make_rgba(0, 255, 0, 255));
+      help_texture_rgba_plot_texel(tex_virtual, VIRTUAL_SIZE.x - 1, VIRTUAL_SIZE.y - 1, color_rgba_make_rgba(0, 0, 255, 255));
+      help_texture_rgba_plot_texel(tex_virtual, 0, VIRTUAL_SIZE.y - 1, color_rgba_make_rgba(255, 255, 0, 255));
 
       // Copy offline to online texture
       const bool SUCCESS_UPDATE_TEXTURE = SDL_UpdateTexture(
