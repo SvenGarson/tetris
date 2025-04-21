@@ -410,6 +410,21 @@ struct tetro_s {
    tetro_mask right;
 };
 
+struct tetro_world_s {
+   struct tetro_s data;
+   struct vec_2i_s position;
+};
+
+struct tetro_world_s tetro_world_make(struct tetro_s tetro, int x, int y)
+{
+   struct tetro_world_s tetro_world;
+
+   tetro_world.data = tetro;
+   tetro_world.position = vec_2i_make_xy(x, y);
+
+   return tetro_world;
+}
+
 bool help_tetro_init_mask(tetro_mask out_mask)
 {
    if (NULL == out_mask) return false;
@@ -487,6 +502,108 @@ bool help_tetro_plot_right(struct tetro_s * out_tetro, const char * pattern)
    if (NULL == out_tetro || NULL == pattern) return false;
 
    return help_tetro_plot_mask(out_tetro->right, out_tetro->size, pattern);
+}
+
+struct tetro_s help_tetro_make_type_I(void)
+{
+   struct tetro_s tetro_I = help_tetro_make_typed_unfinished(TETRO_TYPE_I, 4);
+   help_tetro_plot_design(
+      &tetro_I,
+      "..#."
+      "..#."
+      "..#."
+      "..#."
+   );
+   help_tetro_plot_left(
+      &tetro_I,
+      "...."
+      "...."
+      "...."
+      "...."
+   );
+   help_tetro_plot_right(
+      &tetro_I,
+      "...."
+      "...."
+      "...."
+      "...."
+   );
+
+   return tetro_I;
+}
+
+void help_tetro_rotate_mask_left(tetro_mask mask, int size)
+{
+   tetro_mask rotated;
+   memcpy(rotated, mask, sizeof(rotated));
+
+   // Rotate
+   for (int row = 0; row < size; ++row)
+   {
+      for (int col = 0; col < size; ++col)
+      {
+         rotated[col][row] = mask[row][size - 1 - col];
+      }
+   }
+
+   // Reflect
+   memcpy(mask, rotated, sizeof(rotated));
+}
+
+void help_tetro_rotate_mask_right(tetro_mask mask, int size)
+{
+   tetro_mask rotated;
+   memcpy(rotated, mask, sizeof(rotated));
+
+   // Rotate
+   for (int row = 0; row < size; ++row)
+   {
+      for (int col = 0; col < size; ++col)
+      {
+         rotated[col][row] = mask[size - 1 - row][col];
+      }
+   }
+
+   // Reflect
+   memcpy(mask, rotated, sizeof(rotated));
+}
+
+bool help_tetro_world_rotate_left(struct tetro_world_s * tetro)
+{
+   if (NULL == tetro) return false;
+
+   help_tetro_rotate_mask_left(tetro->data.design, tetro->data.size);
+   help_tetro_rotate_mask_left(tetro->data.left, tetro->data.size);
+   help_tetro_rotate_mask_left(tetro->data.right, tetro->data.size);
+
+   // Success
+   return true;
+}
+
+bool help_tetro_world_rotate_right(struct tetro_world_s * tetro)
+{
+   if (NULL == tetro) return false;
+
+   help_tetro_rotate_mask_right(tetro->data.design, tetro->data.size);
+   help_tetro_rotate_mask_right(tetro->data.left, tetro->data.size);
+   help_tetro_rotate_mask_right(tetro->data.right, tetro->data.size);
+
+   // Success
+   return true;
+}
+
+struct tetro_world_s help_tetro_world_make_type_at(enum tetro_type_e type, int x, int y)
+{
+   // TODO-GS: Spawning of tetros at position
+   switch (type)
+   {
+      case TETRO_TYPE_I:
+         return tetro_world_make(help_tetro_make_type_I(), x, y);
+         break;
+      default:
+         printf("\nAttempting to spawn un-supported tetro type");
+         break;
+   }
 }
 
 // Helpers - Input
@@ -610,6 +727,25 @@ bool help_input_key_released(struct input_s * input, enum custom_key_e key)
    return help_input_key_in_state(input, key, KEY_STATE_RELEASED);
 }
 
+// Helper - Field
+#define FIELD_WIDTH (5)
+#define FIELD_HEIGHT (10)
+struct field_cell_s {
+   enum tetro_type_e type;
+   bool occupied;
+};
+const int FIELD_TILE_SIZE = 8;
+
+struct field_cell_s field_cell_make(enum tetro_type_e type, bool occupied)
+{
+   struct field_cell_s field_cell;
+
+   field_cell.type = type;
+   field_cell.occupied = occupied;
+
+   return field_cell;
+}
+
 // Logic - Main
 int main(int argc, char * argv[])
 {
@@ -702,12 +838,11 @@ int main(int argc, char * argv[])
    }
 
    // Create rendering sprites
-   const int SPRITE_TILE_SIZE = 8;
-   const struct sprite_s SPR_LIGHTEST = sprite_make(12, 2, SPRITE_TILE_SIZE);
-   const struct sprite_s SPR_LIGHT = sprite_make(13, 2, SPRITE_TILE_SIZE);
-   const struct sprite_s SPR_DARK = sprite_make(14, 2, SPRITE_TILE_SIZE);
-   const struct sprite_s SPR_DARKEST = sprite_make(15, 2, SPRITE_TILE_SIZE);
-   const struct sprite_s SPR_CELL = sprite_make(3, 6, SPRITE_TILE_SIZE);
+   const struct sprite_s SPR_LIGHTEST = sprite_make(12, 2, FIELD_TILE_SIZE);
+   const struct sprite_s SPR_LIGHT = sprite_make(13, 2, FIELD_TILE_SIZE);
+   const struct sprite_s SPR_DARK = sprite_make(14, 2, FIELD_TILE_SIZE);
+   const struct sprite_s SPR_DARKEST = sprite_make(15, 2, FIELD_TILE_SIZE);
+   const struct sprite_s SPR_CELL = sprite_make(3, 6, FIELD_TILE_SIZE);
 
    // Log engine status
    const int DW = 20;
@@ -721,28 +856,17 @@ int main(int argc, char * argv[])
    const uint64_t NS_PER_S = 1000000000;
 
    // Prepare tetros
-   struct tetro_s tetro_I = help_tetro_make_typed_unfinished(TETRO_TYPE_I, 4);
-   help_tetro_plot_design(
-      &tetro_I,
-      "..#."
-      "..#."
-      "..#."
-      "..#."
-   );
-   help_tetro_plot_left(
-      &tetro_I,
-      "...."
-      "...."
-      "...."
-      "...."
-   );
-   help_tetro_plot_right(
-      &tetro_I,
-      "...."
-      "...."
-      "...."
-      "...."
-   );
+   struct tetro_world_s tetro_active = help_tetro_world_make_type_at(TETRO_TYPE_I, 1, 3);
+
+   // Playing field
+   struct field_cell_s field[FIELD_WIDTH][FIELD_HEIGHT];
+   for (int fy = 0; fy < FIELD_HEIGHT; ++fy)
+   {
+      for (int fx = 0; fx < FIELD_WIDTH; ++fx)
+      {
+         field[fx][fy] = field_cell_make(TETRO_TYPE_I, false);
+      }
+   }
 
    // Game loop
    bool tetris_close_requested = false;
@@ -761,36 +885,46 @@ int main(int argc, char * argv[])
       // Determine input state
       help_input_determine_intermediate_state(input);
 
-      // Test input stuff
-      static struct vec_2i_s tetro_pos = { 0, 0 };
-      if (help_input_key_pressed(input, CUSTOM_KEY_UP)) tetro_pos.y -= SPRITE_TILE_SIZE;
-      if (help_input_key_pressed(input, CUSTOM_KEY_DOWN)) tetro_pos.y += SPRITE_TILE_SIZE;
-      if (help_input_key_pressed(input, CUSTOM_KEY_LEFT)) tetro_pos.x -= SPRITE_TILE_SIZE;
-      if (help_input_key_pressed(input, CUSTOM_KEY_RIGHT)) tetro_pos.x += SPRITE_TILE_SIZE;
+      // Tick
+      if (help_input_key_pressed(input, CUSTOM_KEY_B)) help_tetro_world_rotate_left(&tetro_active);
+      if (help_input_key_pressed(input, CUSTOM_KEY_A)) help_tetro_world_rotate_right(&tetro_active);
 
       // Render into offline texture
       // -> Clear
       help_texture_rgba_clear(tex_virtual, color_rgba_make_rgba(50, 50, 50, 255));
       // -> Render scene
-      // ----> Testing tetro creation
-      for (int ty = 0; ty < tetro_I.size; ++ty)
+      // ----> Playing field
+      for (int fy = 0; fy < FIELD_HEIGHT; ++fy)
       {
-         for (int tx = 0; tx < tetro_I.size; ++tx)
+         for (int fx = 0; fx < FIELD_WIDTH; ++fx)
          {
-            if (tetro_I.design[tx][ty] == false) continue;
+            const struct field_cell_s * FIELD_CELL = &field[fx][fy];
+            if (false == FIELD_CELL->occupied) continue;
+
             help_tex_sprite_render(
-               SPR_CELL,
-               tetro_pos.x + tx * SPRITE_TILE_SIZE,
-               tetro_pos.y + ty * SPRITE_TILE_SIZE,
+               SPR_LIGHT,
+               fx * FIELD_TILE_SIZE,
+               fy * FIELD_TILE_SIZE,
                tex_sprites,
                tex_virtual
             );
          }
       }
-      // ----> Other stuff
-      //help_tex_sprite_render(SPR_LIGHT, 8, 0, tex_sprites, tex_virtual);
-      //help_tex_sprite_render(SPR_DARK, 16, 0, tex_sprites, tex_virtual);
-      //help_tex_sprite_render(SPR_DARKEST, 24, 0, tex_sprites, tex_virtual);
+      // ----> Testing tetro creation
+      for (int ty = 0; ty < tetro_active.data.size; ++ty)
+      {
+         for (int tx = 0; tx < tetro_active.data.size; ++tx)
+         {
+            if (tetro_active.data.design[tx][ty] == false) continue;
+            help_tex_sprite_render(
+               SPR_CELL,
+               tx * FIELD_TILE_SIZE,
+               ty * FIELD_TILE_SIZE,
+               tex_sprites,
+               tex_virtual
+            );
+         }
+      }
 
       // Copy offline to online texture
       const bool SUCCESS_UPDATE_TEXTURE = SDL_UpdateTexture(
