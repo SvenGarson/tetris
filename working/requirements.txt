@@ -1,5 +1,5 @@
 # Next Task
-- basic input for gbc controls
+- place active tetro into field
 - basic gameplay: spawn, movement, rotation, etc
 - decide on a coordinate system
 

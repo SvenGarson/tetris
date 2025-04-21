@@ -728,8 +728,8 @@ bool help_input_key_released(struct input_s * input, enum custom_key_e key)
 }
 
 // Helper - Field
-#define FIELD_WIDTH (5)
-#define FIELD_HEIGHT (10)
+#define FIELD_WIDTH (10)
+#define FIELD_HEIGHT (18)
 struct field_cell_s {
    enum tetro_type_e type;
    bool occupied;
@@ -744,6 +744,16 @@ struct field_cell_s field_cell_make(enum tetro_type_e type, bool occupied)
    field_cell.occupied = occupied;
 
    return field_cell;
+}
+
+bool help_field_coords_out_of_bounds(int x, int y)
+{
+   return (
+      x < 0 ||
+      x >= FIELD_WIDTH ||
+      y < 0 ||
+      y >= FIELD_HEIGHT
+   ) ? true : false;
 }
 
 // Logic - Main
@@ -856,7 +866,7 @@ int main(int argc, char * argv[])
    const uint64_t NS_PER_S = 1000000000;
 
    // Prepare tetros
-   struct tetro_world_s tetro_active = help_tetro_world_make_type_at(TETRO_TYPE_I, 1, 3);
+   struct tetro_world_s tetro_active = help_tetro_world_make_type_at(TETRO_TYPE_I, 0, 0);
 
    // Playing field
    struct field_cell_s field[FIELD_WIDTH][FIELD_HEIGHT];
@@ -886,8 +896,57 @@ int main(int argc, char * argv[])
       help_input_determine_intermediate_state(input);
 
       // Tick
-      if (help_input_key_pressed(input, CUSTOM_KEY_B)) help_tetro_world_rotate_left(&tetro_active);
-      if (help_input_key_pressed(input, CUSTOM_KEY_A)) help_tetro_world_rotate_right(&tetro_active);
+      // ----> Rotate active tetro
+      if (help_input_key_pressed(input, CUSTOM_KEY_UP))
+      {
+         tetro_active.position.y -= FIELD_TILE_SIZE;
+      }
+      if (help_input_key_pressed(input, CUSTOM_KEY_DOWN))
+      {
+         tetro_active.position.y += FIELD_TILE_SIZE;
+      }
+      if (help_input_key_pressed(input, CUSTOM_KEY_LEFT))
+      {
+         tetro_active.position.x -= FIELD_TILE_SIZE;
+      }
+      if (help_input_key_pressed(input, CUSTOM_KEY_RIGHT))
+      {
+         tetro_active.position.x += FIELD_TILE_SIZE;
+      }
+      if (help_input_key_pressed(input, CUSTOM_KEY_B))
+      {
+         help_tetro_world_rotate_left(&tetro_active);
+      }
+      if (help_input_key_pressed(input, CUSTOM_KEY_A))
+      {
+         help_tetro_world_rotate_right(&tetro_active);
+      }
+      if (help_input_key_pressed(input, CUSTOM_KEY_START))
+      {
+         // Place active tetro in place
+         for (int ty = 0; ty < tetro_active.data.size; ++ty)
+         {
+            for (int tx = 0; tx < tetro_active.data.size; ++tx)
+            {
+               if (tetro_active.data.design[tx][ty] == false) continue;
+
+               // Drop this tetro cell in field space
+               const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
+                  (tetro_active.position.x / FIELD_TILE_SIZE) + tx,
+                  (tetro_active.position.y / FIELD_TILE_SIZE) + ty
+               );
+
+               // Ignore invalid field cells
+               if (help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y))
+               {
+                  continue;
+               }
+
+               // Safe to place tetro cell
+               field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y] = field_cell_make(tetro_active.data.type, true);
+            }
+         }
+      }
 
       // Render into offline texture
       // -> Clear
@@ -898,9 +957,7 @@ int main(int argc, char * argv[])
       {
          for (int fx = 0; fx < FIELD_WIDTH; ++fx)
          {
-            const struct field_cell_s * FIELD_CELL = &field[fx][fy];
-            if (false == FIELD_CELL->occupied) continue;
-
+            // Background
             help_tex_sprite_render(
                SPR_LIGHT,
                fx * FIELD_TILE_SIZE,
@@ -908,9 +965,25 @@ int main(int argc, char * argv[])
                tex_sprites,
                tex_virtual
             );
+            
+            // Placed cells
+            const struct field_cell_s * FIELD_CELL = &field[fx][fy];
+            if (false == FIELD_CELL->occupied)
+            {
+               continue;
+            }
+
+            // Field occupied
+            help_tex_sprite_render(
+               SPR_DARKEST,
+               fx * FIELD_TILE_SIZE,
+               fy * FIELD_TILE_SIZE,
+               tex_sprites,
+               tex_virtual
+            );
          }
       }
-      // ----> Testing tetro creation
+      // ----> Active tetro
       for (int ty = 0; ty < tetro_active.data.size; ++ty)
       {
          for (int tx = 0; tx < tetro_active.data.size; ++tx)
@@ -918,8 +991,8 @@ int main(int argc, char * argv[])
             if (tetro_active.data.design[tx][ty] == false) continue;
             help_tex_sprite_render(
                SPR_CELL,
-               tx * FIELD_TILE_SIZE,
-               ty * FIELD_TILE_SIZE,
+               tetro_active.position.x + tx * FIELD_TILE_SIZE,
+               tetro_active.position.y + ty * FIELD_TILE_SIZE,
                tex_sprites,
                tex_virtual
             );
