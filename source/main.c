@@ -388,6 +388,228 @@ bool help_tex_sprite_render(struct sprite_s sprite, int x, int y, struct texture
    return true;
 }
 
+// Helpers - Tetro
+#define TETRO_MAX_SIZE (4)
+enum tetro_type_e {
+   TETRO_TYPE_I,
+   TETRO_TYPE_Lr,
+   TETRO_TYPE_L,
+   TETRO_TYPE_S,
+   TETRO_TYPE_Z,
+   TETRO_TYPE_T,
+   TETRO_TYPE_O
+};
+
+typedef bool tetro_mask[TETRO_MAX_SIZE][TETRO_MAX_SIZE];
+
+struct tetro_s {
+   enum tetro_type_e type;
+   int size;
+   tetro_mask design;
+   tetro_mask left;
+   tetro_mask right;
+};
+
+bool help_tetro_init_mask(tetro_mask out_mask)
+{
+   if (NULL == out_mask) return false;
+
+   for (int py = 0; py < TETRO_MAX_SIZE; ++py)
+   {
+      for (int px = 0; px < TETRO_MAX_SIZE; ++px)
+      {
+         out_mask[px][py] = false;
+      }
+   }
+
+   return true;
+}
+
+struct tetro_s help_tetro_make_typed_unfinished(enum tetro_type_e type, int size)
+{
+   struct tetro_s tetro;
+
+   tetro.type = type;
+   tetro.size = size;
+   help_tetro_init_mask(tetro.design);
+   help_tetro_init_mask(tetro.left);
+   help_tetro_init_mask(tetro.right);
+
+   return tetro;
+}
+
+bool help_tetro_plot_mask(tetro_mask mask, int size, const char * pattern)
+{
+   if (NULL == mask || NULL == pattern) return false;
+
+   const int TETRO_CELL_COUNT = size * size;
+   if (strlen(pattern) != TETRO_CELL_COUNT)
+   {
+      printf("\nFailed to plot tetro mask because pattern length does not match tetro cell count");
+      return false;
+   }
+
+   int i_pattern = 0;
+   for (int py = 0; py < size; ++py)
+   {
+      for (int px = 0; px < size; ++px)
+      {
+         // Plot pattern
+         // Assumes that cells have been nulled to non-plotted during init
+         const bool PLOT_CELL = (pattern[i_pattern++] == '#') ? true : false;
+         if (PLOT_CELL)
+         {
+            mask[px][py] = true;
+         }
+      }
+   }
+
+   // Success
+   return true;
+}
+
+bool help_tetro_plot_design(struct tetro_s * out_tetro, const char * pattern)
+{
+   if (NULL == out_tetro || NULL == pattern) return false;
+
+   return help_tetro_plot_mask(out_tetro->design, out_tetro->size, pattern);
+}
+
+bool help_tetro_plot_left(struct tetro_s * out_tetro, const char * pattern)
+{
+   if (NULL == out_tetro || NULL == pattern) return false;
+
+   return help_tetro_plot_mask(out_tetro->left, out_tetro->size, pattern);
+}
+
+bool help_tetro_plot_right(struct tetro_s * out_tetro, const char * pattern)
+{
+   if (NULL == out_tetro || NULL == pattern) return false;
+
+   return help_tetro_plot_mask(out_tetro->right, out_tetro->size, pattern);
+}
+
+// Helpers - Input
+enum custom_key_e {
+   CUSTOM_KEY_UP,
+   CUSTOM_KEY_DOWN,
+   CUSTOM_KEY_LEFT,
+   CUSTOM_KEY_RIGHT,
+   CUSTOM_KEY_A,
+   CUSTOM_KEY_B,
+   CUSTOM_KEY_START,
+   CUSTOM_KEY_SELECT,
+   CUSTOM_KEY_COUNT
+};
+
+enum key_state_e {
+   KEY_STATE_NONE,
+   KEY_STATE_PRESSED,
+   KEY_STATE_HELD,
+   KEY_STATE_RELEASED
+};
+
+struct input_s {
+   enum key_state_e key_states[CUSTOM_KEY_COUNT];
+};
+
+struct input_s * help_input_make(void)
+{
+   struct input_s * instance = malloc(sizeof(struct input_s));
+   if (NULL == instance)
+   {
+      printf("\nFailed to allocate input instance");
+      return NULL;
+   }
+
+   // Initialize custom key states
+   for (int custom_key = 0; custom_key < CUSTOM_KEY_COUNT; ++custom_key)
+   {
+      instance->key_states[custom_key] = KEY_STATE_NONE;
+   }
+
+   // Success
+   return instance;
+}
+
+void help_input_destroy(struct input_s * input)
+{
+   free(input);
+}
+
+enum key_state_e help_input_determine_key_state(enum key_state_e current_state, bool currently_pressed)
+{
+   switch (current_state)
+   {
+      case KEY_STATE_NONE:
+         return currently_pressed ? KEY_STATE_PRESSED : KEY_STATE_NONE;
+         break;
+      case KEY_STATE_PRESSED:
+         return currently_pressed ? KEY_STATE_HELD : KEY_STATE_RELEASED;
+         break;
+      case KEY_STATE_HELD:
+         return currently_pressed ? KEY_STATE_HELD : KEY_STATE_RELEASED;
+         break;
+      case KEY_STATE_RELEASED:
+         return currently_pressed ? KEY_STATE_PRESSED : KEY_STATE_NONE;
+         break;
+   }
+}
+
+bool help_input_determine_intermediate_state(struct input_s * instance)
+{
+   if (NULL == instance) return false;
+
+   const bool * KEYBOARD_STATE = SDL_GetKeyboardState(NULL);
+   const enum key_state_e NEW_STATE_UP = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_UP], KEYBOARD_STATE[SDL_SCANCODE_W]);
+   const enum key_state_e NEW_STATE_DOWN = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_DOWN], KEYBOARD_STATE[SDL_SCANCODE_S]);
+   const enum key_state_e NEW_STATE_LEFT = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_LEFT], KEYBOARD_STATE[SDL_SCANCODE_A]);
+   const enum key_state_e NEW_STATE_RIGHT = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_RIGHT], KEYBOARD_STATE[SDL_SCANCODE_D]);
+   const enum key_state_e NEW_STATE_A = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_A], KEYBOARD_STATE[SDL_SCANCODE_UP]);
+   const enum key_state_e NEW_STATE_B = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_B], KEYBOARD_STATE[SDL_SCANCODE_LEFT]);
+   const enum key_state_e NEW_STATE_START = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_START], KEYBOARD_STATE[SDL_SCANCODE_RETURN]);
+   const enum key_state_e NEW_STATE_SELECT = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_SELECT], KEYBOARD_STATE[SDL_SCANCODE_DELETE]);
+
+   instance->key_states[CUSTOM_KEY_UP] = NEW_STATE_UP;
+   instance->key_states[CUSTOM_KEY_DOWN] = NEW_STATE_DOWN;
+   instance->key_states[CUSTOM_KEY_LEFT] = NEW_STATE_LEFT;
+   instance->key_states[CUSTOM_KEY_RIGHT] = NEW_STATE_RIGHT;
+   instance->key_states[CUSTOM_KEY_A] = NEW_STATE_A;
+   instance->key_states[CUSTOM_KEY_B] = NEW_STATE_B;
+   instance->key_states[CUSTOM_KEY_START] = NEW_STATE_START;
+   instance->key_states[CUSTOM_KEY_SELECT] = NEW_STATE_SELECT;
+
+   // Success
+   return true;
+}
+
+bool help_input_key_in_state(struct input_s * input, enum custom_key_e key, enum key_state_e state)
+{
+   if (NULL == input) return false;
+
+   return input->key_states[key] == state;
+}
+
+bool help_input_key_none(struct input_s * input, enum custom_key_e key)
+{
+   return help_input_key_in_state(input, key, KEY_STATE_NONE);
+}
+
+bool help_input_key_pressed(struct input_s * input, enum custom_key_e key)
+{
+   return help_input_key_in_state(input, key, KEY_STATE_PRESSED);
+}
+
+bool help_input_key_held(struct input_s * input, enum custom_key_e key)
+{
+   return help_input_key_in_state(input, key, KEY_STATE_HELD);
+}
+
+bool help_input_key_released(struct input_s * input, enum custom_key_e key)
+{
+   return help_input_key_in_state(input, key, KEY_STATE_RELEASED);
+}
+
 // Logic - Main
 int main(int argc, char * argv[])
 {
@@ -456,6 +678,14 @@ int main(int argc, char * argv[])
       return EXIT_FAILURE;
    }
 
+   // Create input
+   struct input_s * input = help_input_make();
+   if (NULL == input)
+   {
+      printf("\nFailed to create input");
+      return EXIT_FAILURE;
+   }
+
    // Prepare resource strings
    char dir_abs_res_images[1024];
    snprintf(dir_abs_res_images, sizeof(dir_abs_res_images), "%s\\images\\", DIR_ABS_RES);
@@ -473,7 +703,11 @@ int main(int argc, char * argv[])
 
    // Create rendering sprites
    const int SPRITE_TILE_SIZE = 8;
-   const struct sprite_s SPR_A = sprite_make(0, 0, SPRITE_TILE_SIZE);
+   const struct sprite_s SPR_LIGHTEST = sprite_make(12, 2, SPRITE_TILE_SIZE);
+   const struct sprite_s SPR_LIGHT = sprite_make(13, 2, SPRITE_TILE_SIZE);
+   const struct sprite_s SPR_DARK = sprite_make(14, 2, SPRITE_TILE_SIZE);
+   const struct sprite_s SPR_DARKEST = sprite_make(15, 2, SPRITE_TILE_SIZE);
+   const struct sprite_s SPR_CELL = sprite_make(3, 6, SPRITE_TILE_SIZE);
 
    // Log engine status
    const int DW = 20;
@@ -485,6 +719,30 @@ int main(int argc, char * argv[])
    int frames_per_second = 0;
    uint64_t timer_fps_ns = SDL_GetTicksNS();
    const uint64_t NS_PER_S = 1000000000;
+
+   // Prepare tetros
+   struct tetro_s tetro_I = help_tetro_make_typed_unfinished(TETRO_TYPE_I, 4);
+   help_tetro_plot_design(
+      &tetro_I,
+      "..#."
+      "..#."
+      "..#."
+      "..#."
+   );
+   help_tetro_plot_left(
+      &tetro_I,
+      "...."
+      "...."
+      "...."
+      "...."
+   );
+   help_tetro_plot_right(
+      &tetro_I,
+      "...."
+      "...."
+      "...."
+      "...."
+   );
 
    // Game loop
    bool tetris_close_requested = false;
@@ -500,20 +758,39 @@ int main(int argc, char * argv[])
          }
       }
 
+      // Determine input state
+      help_input_determine_intermediate_state(input);
+
+      // Test input stuff
+      static struct vec_2i_s tetro_pos = { 0, 0 };
+      if (help_input_key_pressed(input, CUSTOM_KEY_UP)) tetro_pos.y -= SPRITE_TILE_SIZE;
+      if (help_input_key_pressed(input, CUSTOM_KEY_DOWN)) tetro_pos.y += SPRITE_TILE_SIZE;
+      if (help_input_key_pressed(input, CUSTOM_KEY_LEFT)) tetro_pos.x -= SPRITE_TILE_SIZE;
+      if (help_input_key_pressed(input, CUSTOM_KEY_RIGHT)) tetro_pos.x += SPRITE_TILE_SIZE;
+
       // Render into offline texture
       // -> Clear
       help_texture_rgba_clear(tex_virtual, color_rgba_make_rgba(50, 50, 50, 255));
       // -> Render scene
-      static float spr_x = 0.0f;
-      static float spr_y = 0.0f;
-      const int FRAMES_PER_SECOND = 60;
-      const float DT = 1.0f / FRAMES_PER_SECOND;
-      const float PIXELS_PER_SECOND = 5.0f;
-      spr_x += PIXELS_PER_SECOND * DT;
-      spr_y += PIXELS_PER_SECOND * DT;
-      help_tex_sprite_render(SPR_A, spr_x, spr_y, tex_sprites, tex_virtual);
-      help_tex_sprite_render(SPR_A, spr_x + SPRITE_TILE_SIZE, spr_y, tex_sprites, tex_virtual);
-      help_tex_sprite_render(SPR_A, spr_x + SPRITE_TILE_SIZE * 2, spr_y, tex_sprites, tex_virtual);
+      // ----> Testing tetro creation
+      for (int ty = 0; ty < tetro_I.size; ++ty)
+      {
+         for (int tx = 0; tx < tetro_I.size; ++tx)
+         {
+            if (tetro_I.design[tx][ty] == false) continue;
+            help_tex_sprite_render(
+               SPR_CELL,
+               tetro_pos.x + tx * SPRITE_TILE_SIZE,
+               tetro_pos.y + ty * SPRITE_TILE_SIZE,
+               tex_sprites,
+               tex_virtual
+            );
+         }
+      }
+      // ----> Other stuff
+      //help_tex_sprite_render(SPR_LIGHT, 8, 0, tex_sprites, tex_virtual);
+      //help_tex_sprite_render(SPR_DARK, 16, 0, tex_sprites, tex_virtual);
+      //help_tex_sprite_render(SPR_DARKEST, 24, 0, tex_sprites, tex_virtual);
 
       // Copy offline to online texture
       const bool SUCCESS_UPDATE_TEXTURE = SDL_UpdateTexture(
@@ -569,6 +846,7 @@ int main(int argc, char * argv[])
    }
 
    // Cleanup custom
+   help_input_destroy(input);
    help_texture_rgba_destroy(tex_virtual);
    help_texture_rgba_destroy(tex_sprites);
 
