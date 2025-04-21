@@ -922,11 +922,14 @@ int main(int argc, char * argv[])
    int frames_per_second = 0;
 
    // Integration
-   const int TICKS_PER_SECOND = 30;
+   const int TICKS_PER_SECOND = 50;
    const double FIXED_DELTA_TIME = 1.0 / TICKS_PER_SECOND;
    double time_simulated = 0.0;
    double last_time_tick = help_sdl_time_in_seconds();
    double fixed_delta_time_accumulator = 0.0;
+
+   // Sub-tick timers
+   double last_time_tetro_drop = help_sdl_time_in_seconds();
 
    // Game loop
    bool tetris_close_requested = false;
@@ -960,6 +963,15 @@ int main(int argc, char * argv[])
 
          // Tick engine (time simulated, fixed delta time, blend factor)
          
+         // Drop tetro
+         const double TIMER_TETRO_DROP = 0.65;
+         if (help_sdl_time_in_seconds() >= (last_time_tetro_drop + TIMER_TETRO_DROP))
+         {
+            // TODO-GS: Drop tetro + design collision detection + placement
+
+            // Timer
+            last_time_tetro_drop = help_sdl_time_in_seconds();
+         }
       }
 
       // TODO-GS: Convert to DT based ticking
