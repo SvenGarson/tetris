@@ -1056,9 +1056,6 @@ int main(int argc, char * argv[])
 
             // Movement made
             horizontal_movement_made = true;
-
-            // Movement made
-            horizontal_movement_made = true;
          }
 
          // Update horizontal movement timer
@@ -1098,6 +1095,8 @@ int main(int argc, char * argv[])
                   }
                }
             }
+
+            // Place or drop ?
             if (drop_collision_occured)
             {
                // Drop the tetro because of drop collision
@@ -1123,10 +1122,19 @@ int main(int argc, char * argv[])
                      field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y] = field_cell_make(tetro_active.data.type, true);
                   }
                }
+
+               // Spawn a new tetro
+               // TODO-GS: Random type + preview
+               tetro_active = help_tetro_world_make_type_at_tile(TETRO_TYPE_I,
+                  (FIELD_WIDTH / 2) - 2,
+                  (VIRTUAL_SIZE.y / FIELD_TILE_SIZE) - 4
+               );
+            }
+            else
+            {
+               --tetro_active.tile_pos.y;
             }
 
-            // TODO-GS: Drop tetro + design collision detection + placement
-            --tetro_active.tile_pos.y;
             // Timer
             last_time_tetro_drop = help_sdl_time_in_seconds();
          }

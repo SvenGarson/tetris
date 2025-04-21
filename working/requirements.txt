@@ -1,8 +1,7 @@
 # Next Task
-- simple tick + DLR movement
-- simulate tetris in single cells -> no field coordinates !
-- basic gameplay: spawn, movement, rotation, etc
+- basic gameplay: spawn cycle
 - implement rest of the shapes
+- random spawn cycle + placing
 - timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
 
 # Goal
