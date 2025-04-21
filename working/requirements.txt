@@ -1,4 +1,8 @@
 # Next Task
+- left and right rotation mis match -> ???
+> collision detection
+   - rotation only when possible
+- simulate tetris in single cells -> no field coordinates !
 - basic gameplay: spawn, movement, rotation, etc
 - decide on a coordinate system
 

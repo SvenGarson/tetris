@@ -237,6 +237,31 @@ void help_texture_rgba_plot_aabb(struct texture_rgba_s * instance, int min_x, in
    }
 }
 
+void help_texture_rgba_plot_horizontal_line(struct texture_rgba_s * instance, int min_x, int width, int y, color_rgba_t color)
+{
+   for (int sx = min_x; sx < (min_x + width); ++sx)
+   {
+      help_texture_rgba_plot_texel(instance, sx, y, color);
+   }
+}
+
+void help_texture_rgba_plot_vertical_line(struct texture_rgba_s * instance, int min_y, int height, int x, color_rgba_t color)
+{
+   for (int sy = min_y; sy < (min_y + height); ++sy)
+   {
+      help_texture_rgba_plot_texel(instance, x, sy, color);
+   }
+}
+
+void help_texture_rgba_plot_aabb_outline(struct texture_rgba_s * instance, int min_x, int min_y, int width, int height, color_rgba_t color)
+{
+   help_texture_rgba_plot_horizontal_line(instance, min_x, width, min_y, color);
+   help_texture_rgba_plot_horizontal_line(instance, min_x, width, min_y + height - 1, color);
+
+   help_texture_rgba_plot_vertical_line(instance, min_y, height, min_x, color);
+   help_texture_rgba_plot_vertical_line(instance, min_y, height, min_x + height - 1, color);
+}
+
 bool help_texture_rgba_access_texel(struct texture_rgba_s * instance, int x, int y, color_rgba_t * out_color)
 {
    if (NULL == instance || NULL == out_color) return false;
@@ -527,17 +552,17 @@ struct tetro_s help_tetro_make_type_I(void)
    );
    help_tetro_plot_left(
       &tetro_I,
-      "...."
-      "...."
-      "...."
-      "...."
+      "###."
+      "####"
+      "..##"
+      "..##"
    );
    help_tetro_plot_right(
       &tetro_I,
-      "...."
-      "...."
-      "...."
-      "...."
+      "..##"
+      "..##"
+      "####"
+      "###."
    );
 
    return tetro_I;
@@ -926,7 +951,40 @@ int main(int argc, char * argv[])
       }
       if (help_input_key_pressed(input, CUSTOM_KEY_B))
       {
-         help_tetro_world_rotate_left(&tetro_active);
+         // Rotate only when possible
+         /*
+            If any left/right tetro cell overlaps an occupied cell -> no rotation
+         */
+         bool left_collision_occured = false;
+         for (int ty = 0; ty < tetro_active.data.size; ++ty)
+         {
+            for (int tx = 0; tx < tetro_active.data.size; ++tx)
+            {
+               const bool TETRO_LEFT_CELL_PLOTTED = tetro_active.data.left[tx][ty];
+               if (false == TETRO_LEFT_CELL_PLOTTED) continue;
+
+               // Any overlap disables the rotation
+               const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
+                  (tetro_active.position.x / FIELD_TILE_SIZE) + tx,
+                  (tetro_active.position.y / FIELD_TILE_SIZE) + ty
+               );
+
+               // No collision outside field bounds
+               if (help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y))
+               {
+                  continue;
+               }
+
+               // Collision with occupied cell ?
+               const bool FIELD_CELL_OCCUPIED = field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y].occupied;
+               if (FIELD_CELL_OCCUPIED)
+               {
+                  // Break out of both loops more cleany - As we know the rotation is not possible
+                  left_collision_occured = true;
+               }
+            }
+         }
+         if (false == left_collision_occured) help_tetro_world_rotate_left(&tetro_active);
       }
       if (help_input_key_pressed(input, CUSTOM_KEY_A))
       {
@@ -1001,15 +1059,44 @@ int main(int argc, char * argv[])
       {
          for (int tx = 0; tx < tetro_active.data.size; ++tx)
          {
-            if (tetro_active.data.design[tx][ty] == false) continue;
-            help_texture_rgba_plot_aabb(
-               tex_virtual,
-               tetro_active.position.x + tx * FIELD_TILE_SIZE,
-               tetro_active.position.y + ty * FIELD_TILE_SIZE,
-               FIELD_TILE_SIZE,
-               FIELD_TILE_SIZE,
-               color_rgba_make_rgba(50, 50, 150, 255)
-            );
+            // Design cells
+            if (tetro_active.data.design[tx][ty])
+            {
+               help_texture_rgba_plot_aabb(
+                  tex_virtual,
+                  tetro_active.position.x + tx * FIELD_TILE_SIZE,
+                  tetro_active.position.y + ty * FIELD_TILE_SIZE,
+                  FIELD_TILE_SIZE,
+                  FIELD_TILE_SIZE,
+                  color_rgba_make_rgba(50, 50, 150, 255)
+               );
+            }
+
+            // Left rotation
+            if (tetro_active.data.left[tx][ty])
+            {
+               help_texture_rgba_plot_aabb_outline(
+                  tex_virtual,
+                  tetro_active.position.x + tx * FIELD_TILE_SIZE,
+                  tetro_active.position.y + ty * FIELD_TILE_SIZE,
+                  FIELD_TILE_SIZE,
+                  FIELD_TILE_SIZE,
+                  color_rgba_make_rgba(150, 0, 0, 255)
+               );
+            }
+
+            // Right rotation
+            if (tetro_active.data.right[tx][ty])
+            {
+               help_texture_rgba_plot_aabb_outline(
+                  tex_virtual,
+                  tetro_active.position.x + tx * FIELD_TILE_SIZE + 1,
+                  tetro_active.position.y + ty * FIELD_TILE_SIZE + 1,
+                  FIELD_TILE_SIZE - 2,
+                  FIELD_TILE_SIZE - 2,
+                  color_rgba_make_rgba(0, 150, 0, 255)
+               );
+            }
          }
       }
 
