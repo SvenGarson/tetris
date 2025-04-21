@@ -456,15 +456,15 @@ struct tetro_s {
 
 struct tetro_world_s {
    struct tetro_s data;
-   struct vec_2i_s position;
+   struct vec_2i_s tile_pos;
 };
 
-struct tetro_world_s tetro_world_make(struct tetro_s tetro, int x, int y)
+struct tetro_world_s tetro_world_make(struct tetro_s tetro, int tile_x, int tile_y)
 {
    struct tetro_world_s tetro_world;
 
    tetro_world.data = tetro;
-   tetro_world.position = vec_2i_make_xy(x, y);
+   tetro_world.tile_pos = vec_2i_make_xy(tile_x, tile_y);
 
    return tetro_world;
 }
@@ -636,13 +636,13 @@ bool help_tetro_world_rotate_right(struct tetro_world_s * tetro)
    return true;
 }
 
-struct tetro_world_s help_tetro_world_make_type_at(enum tetro_type_e type, int x, int y)
+struct tetro_world_s help_tetro_world_make_type_at_tile(enum tetro_type_e type, int tile_x, int tile_y)
 {
    // TODO-GS: Spawning of tetros at position
    switch (type)
    {
       case TETRO_TYPE_I:
-         return tetro_world_make(help_tetro_make_type_I(), x, y);
+         return tetro_world_make(help_tetro_make_type_I(), tile_x, tile_y);
          break;
       default:
          printf("\nAttempting to spawn un-supported tetro type");
@@ -905,7 +905,11 @@ int main(int argc, char * argv[])
    printf("\n\t%-*s: %s", DW, "VSYNC", SUCCESS_USE_VSYNC ? "enabled" : "disabled");
 
    // Prepare tetros
-   struct tetro_world_s tetro_active = help_tetro_world_make_type_at(TETRO_TYPE_I, 0, 0);
+   struct tetro_world_s tetro_active = help_tetro_world_make_type_at_tile(
+      TETRO_TYPE_I,
+      (FIELD_WIDTH / 2) - 2,
+      (VIRTUAL_SIZE.y / FIELD_TILE_SIZE) - 4
+   );
 
    // Playing field
    struct field_cell_s field[FIELD_WIDTH][FIELD_HEIGHT];
@@ -959,16 +963,17 @@ int main(int argc, char * argv[])
 
          // Determine input state
          // @Note: Must be consumed during tick to avoid multiplying input during multiple ticks per frame
+         // @Problem: Currently double firing !?
          help_input_determine_intermediate_state(input);
 
          // Tick engine (time simulated, fixed delta time, blend factor)
          
          // Drop tetro
-         const double TIMER_TETRO_DROP = 0.65;
+         const double TIMER_TETRO_DROP = 1.0f;
          if (help_sdl_time_in_seconds() >= (last_time_tetro_drop + TIMER_TETRO_DROP))
          {
             // TODO-GS: Drop tetro + design collision detection + placement
-
+            --tetro_active.tile_pos.y;
             // Timer
             last_time_tetro_drop = help_sdl_time_in_seconds();
          }
@@ -978,19 +983,19 @@ int main(int argc, char * argv[])
       // ----> Rotate active tetro
       if (help_input_key_pressed(input, CUSTOM_KEY_UP))
       {
-         tetro_active.position.y += FIELD_TILE_SIZE;
+         ++tetro_active.tile_pos.y;
       }
       if (help_input_key_pressed(input, CUSTOM_KEY_DOWN))
       {
-         tetro_active.position.y -= FIELD_TILE_SIZE;
+         --tetro_active.tile_pos.y;
       }
       if (help_input_key_pressed(input, CUSTOM_KEY_LEFT))
       {
-         tetro_active.position.x -= FIELD_TILE_SIZE;
+         --tetro_active.tile_pos.x;
       }
       if (help_input_key_pressed(input, CUSTOM_KEY_RIGHT))
       {
-         tetro_active.position.x += FIELD_TILE_SIZE;
+         ++tetro_active.tile_pos.x;
       }
       if (help_input_key_pressed(input, CUSTOM_KEY_B))
       {
@@ -1005,8 +1010,8 @@ int main(int argc, char * argv[])
 
                // Any overlap disables the rotation
                const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
-                  (tetro_active.position.x / FIELD_TILE_SIZE) + tx,
-                  (tetro_active.position.y / FIELD_TILE_SIZE) + ty
+                  tetro_active.tile_pos.x + tx,
+                  tetro_active.tile_pos.y + ty
                );
 
                // Collision with occupied cell or out-of-field bounds ?
@@ -1033,8 +1038,8 @@ int main(int argc, char * argv[])
 
                // Any overlap disables the rotation
                const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
-                  (tetro_active.position.x / FIELD_TILE_SIZE) + tx,
-                  (tetro_active.position.y / FIELD_TILE_SIZE) + ty
+                  tetro_active.tile_pos.x + tx,
+                  tetro_active.tile_pos.y + ty
                );
 
                // Collision with occupied cell or out-of-field bounds ?
@@ -1060,8 +1065,8 @@ int main(int argc, char * argv[])
 
                // Drop this tetro cell in field space
                const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
-                  (tetro_active.position.x / FIELD_TILE_SIZE) + tx,
-                  (tetro_active.position.y / FIELD_TILE_SIZE) + ty
+                  tetro_active.tile_pos.x + tx,
+                  tetro_active.tile_pos.y + ty
                );
 
                // Ignore invalid field cells
@@ -1123,8 +1128,8 @@ int main(int argc, char * argv[])
             {
                help_texture_rgba_plot_aabb(
                   tex_virtual,
-                  tetro_active.position.x + tx * FIELD_TILE_SIZE,
-                  tetro_active.position.y + ty * FIELD_TILE_SIZE,
+                  (tetro_active.tile_pos.x + tx) * FIELD_TILE_SIZE,
+                  (tetro_active.tile_pos.y + ty) * FIELD_TILE_SIZE,
                   FIELD_TILE_SIZE,
                   FIELD_TILE_SIZE,
                   color_rgba_make_rgba(50, 50, 150, 255)
@@ -1136,8 +1141,8 @@ int main(int argc, char * argv[])
             {
                help_texture_rgba_plot_aabb_outline(
                   tex_virtual,
-                  tetro_active.position.x + tx * FIELD_TILE_SIZE,
-                  tetro_active.position.y + ty * FIELD_TILE_SIZE,
+                  (tetro_active.tile_pos.x + tx) * FIELD_TILE_SIZE,
+                  (tetro_active.tile_pos.y + ty) * FIELD_TILE_SIZE,
                   FIELD_TILE_SIZE,
                   FIELD_TILE_SIZE,
                   color_rgba_make_rgba(150, 0, 0, 255)
@@ -1149,8 +1154,8 @@ int main(int argc, char * argv[])
             {
                help_texture_rgba_plot_aabb_outline(
                   tex_virtual,
-                  tetro_active.position.x + tx * FIELD_TILE_SIZE + 1,
-                  tetro_active.position.y + ty * FIELD_TILE_SIZE + 1,
+                  (tetro_active.tile_pos.x + tx) * FIELD_TILE_SIZE + 1,
+                  (tetro_active.tile_pos.y + ty) * FIELD_TILE_SIZE + 1,
                   FIELD_TILE_SIZE - 2,
                   FIELD_TILE_SIZE - 2,
                   color_rgba_make_rgba(0, 150, 0, 255)

@@ -2,7 +2,8 @@
 - simple tick + DLR movement
 - simulate tetris in single cells -> no field coordinates !
 - basic gameplay: spawn, movement, rotation, etc
-- timestep accumulated FDT interpolation + where to determine input state ?
+- implement rest of the shapes
+- timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
 
 # Goal
 Fully playable version of Tetris
