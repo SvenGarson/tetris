@@ -1,10 +1,8 @@
 # Next Task
-- left and right rotation mis match -> ???
-> collision detection
-   - rotation only when possible
+- simple tick + DLR movement
 - simulate tetris in single cells -> no field coordinates !
 - basic gameplay: spawn, movement, rotation, etc
-- decide on a coordinate system
+- timestep accumulated FDT interpolation + where to determine input state ?
 
 # Goal
 Fully playable version of Tetris

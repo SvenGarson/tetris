@@ -119,6 +119,12 @@ SDL_FRect help_sdl_f_rect_make(float x, float y, float width, float height)
    return frect;
 }
 
+double help_sdl_time_in_seconds(void)
+{
+   const static double NANO_SEC_TO_SEC = 1.0 / 1000000000;
+   return (double)SDL_GetTicksNS() * NANO_SEC_TO_SEC;
+}
+
 // Helpers - Min Max
 int help_minmax_min_2i(int a, int b)
 {
@@ -503,7 +509,7 @@ bool help_tetro_plot_mask(tetro_mask mask, int size, const char * pattern)
    }
 
    int i_pattern = 0;
-   for (int py = 0; py < size; ++py)
+   for (int py = size - 1; py >= 0; --py)
    {
       for (int px = 0; px < size; ++px)
       {
@@ -898,11 +904,6 @@ int main(int argc, char * argv[])
    printf("\n\t%-*s: %s", DW, "resource directory", DIR_ABS_RES);
    printf("\n\t%-*s: %s", DW, "VSYNC", SUCCESS_USE_VSYNC ? "enabled" : "disabled");
 
-   // FPS counter
-   int frames_per_second = 0;
-   uint64_t timer_fps_ns = SDL_GetTicksNS();
-   const uint64_t NS_PER_S = 1000000000;
-
    // Prepare tetros
    struct tetro_world_s tetro_active = help_tetro_world_make_type_at(TETRO_TYPE_I, 0, 0);
 
@@ -915,6 +916,17 @@ int main(int argc, char * argv[])
          field[fx][fy] = field_cell_make(TETRO_TYPE_I, false);
       }
    }
+
+   // FPS counter
+   double last_time_fps = help_sdl_time_in_seconds();
+   int frames_per_second = 0;
+
+   // Integration
+   const int TICKS_PER_SECOND = 30;
+   const double FIXED_DELTA_TIME = 1.0 / TICKS_PER_SECOND;
+   double time_simulated = 0.0;
+   double last_time_tick = help_sdl_time_in_seconds();
+   double fixed_delta_time_accumulator = 0.0;
 
    // Game loop
    bool tetris_close_requested = false;
@@ -930,18 +942,35 @@ int main(int argc, char * argv[])
          }
       }
 
-      // Determine input state
-      help_input_determine_intermediate_state(input);
-
       // Tick
+      const double NEW_TIME = help_sdl_time_in_seconds();
+      const double LAST_FRAME_DURATION = help_sdl_time_in_seconds() - last_time_tick;
+      last_time_tick = NEW_TIME;
+
+      fixed_delta_time_accumulator += LAST_FRAME_DURATION;
+      while (fixed_delta_time_accumulator >= FIXED_DELTA_TIME)
+      {
+         // Housekeeping
+         fixed_delta_time_accumulator -= FIXED_DELTA_TIME;
+         time_simulated += FIXED_DELTA_TIME;
+
+         // Determine input state
+         // @Note: Must be consumed during tick to avoid multiplying input during multiple ticks per frame
+         help_input_determine_intermediate_state(input);
+
+         // Tick engine (time simulated, fixed delta time, blend factor)
+         
+      }
+
+      // TODO-GS: Convert to DT based ticking
       // ----> Rotate active tetro
       if (help_input_key_pressed(input, CUSTOM_KEY_UP))
       {
-         tetro_active.position.y -= FIELD_TILE_SIZE;
+         tetro_active.position.y += FIELD_TILE_SIZE;
       }
       if (help_input_key_pressed(input, CUSTOM_KEY_DOWN))
       {
-         tetro_active.position.y += FIELD_TILE_SIZE;
+         tetro_active.position.y -= FIELD_TILE_SIZE;
       }
       if (help_input_key_pressed(input, CUSTOM_KEY_LEFT))
       {
@@ -954,9 +983,6 @@ int main(int argc, char * argv[])
       if (help_input_key_pressed(input, CUSTOM_KEY_B))
       {
          // Rotate only when possible
-         /*
-            If any left/right tetro cell overlaps an occupied cell -> no rotation
-         */
          bool left_collision_occured = false;
          for (int ty = 0; ty < tetro_active.data.size; ++ty)
          {
@@ -971,15 +997,10 @@ int main(int argc, char * argv[])
                   (tetro_active.position.y / FIELD_TILE_SIZE) + ty
                );
 
-               // No collision outside field bounds
-               if (help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y))
-               {
-                  continue;
-               }
-
-               // Collision with occupied cell ?
+               // Collision with occupied cell or out-of-field bounds ?
+               const bool OUT_OF_BOUNDS_COLLISION = help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y);
                const bool FIELD_CELL_OCCUPIED = field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y].occupied;
-               if (FIELD_CELL_OCCUPIED)
+               if (OUT_OF_BOUNDS_COLLISION || FIELD_CELL_OCCUPIED)
                {
                   // Break out of both loops more cleany - As we know the rotation is not possible
                   left_collision_occured = true;
@@ -990,7 +1011,31 @@ int main(int argc, char * argv[])
       }
       if (help_input_key_pressed(input, CUSTOM_KEY_A))
       {
-         help_tetro_world_rotate_right(&tetro_active);
+         bool right_collision_occured = false;
+         for (int ty = 0; ty < tetro_active.data.size; ++ty)
+         {
+            for (int tx = 0; tx < tetro_active.data.size; ++tx)
+            {
+               const bool TETRO_RIGHT_CELL_PLOTTED = tetro_active.data.right[tx][ty];
+               if (false == TETRO_RIGHT_CELL_PLOTTED) continue;
+
+               // Any overlap disables the rotation
+               const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
+                  (tetro_active.position.x / FIELD_TILE_SIZE) + tx,
+                  (tetro_active.position.y / FIELD_TILE_SIZE) + ty
+               );
+
+               // Collision with occupied cell or out-of-field bounds ?
+               const bool OUT_OF_BOUNDS_COLLISION = help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y);
+               const bool FIELD_CELL_OCCUPIED = field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y].occupied;
+               if (OUT_OF_BOUNDS_COLLISION || FIELD_CELL_OCCUPIED)
+               {
+                  // Break out of both loops more cleany - As we know the rotation is not possible
+                  right_collision_occured = true;
+               }
+            }
+         }
+         if (false == right_collision_occured) help_tetro_world_rotate_right(&tetro_active);
       }
       if (help_input_key_pressed(input, CUSTOM_KEY_START))
       {
@@ -1101,11 +1146,6 @@ int main(int argc, char * argv[])
             }
          }
       }
-      // ----> Coordiante system
-      help_texture_rgba_plot_texel(tex_virtual, 0, 0, color_rgba_make_rgba(255, 0, 0, 255));
-      help_texture_rgba_plot_texel(tex_virtual, VIRTUAL_SIZE.x - 1, 0, color_rgba_make_rgba(0, 255, 0, 255));
-      help_texture_rgba_plot_texel(tex_virtual, VIRTUAL_SIZE.x - 1, VIRTUAL_SIZE.y - 1, color_rgba_make_rgba(0, 0, 255, 255));
-      help_texture_rgba_plot_texel(tex_virtual, 0, VIRTUAL_SIZE.y - 1, color_rgba_make_rgba(255, 255, 0, 255));
 
       // Copy offline to online texture
       const bool SUCCESS_UPDATE_TEXTURE = SDL_UpdateTexture(
@@ -1147,16 +1187,15 @@ int main(int argc, char * argv[])
       }
 
       // Determine FPS
-      if (SDL_GetTicksNS() >= (timer_fps_ns + NS_PER_S))
+      if (help_sdl_time_in_seconds() >= (last_time_fps + 1.0))
       {
-         printf("\nFPS: %d", frames_per_second);
-
-         // Reset FPS timer
+         const int FPS = frames_per_second;
+         //printf("\nFPS: %d", FPS);
          frames_per_second = 0;
-         timer_fps_ns = SDL_GetTicksNS();
+         last_time_fps = help_sdl_time_in_seconds();
       }
 
-      // Count frames executed
+      // Count frame towards FPS
       ++frames_per_second;
    }
 
