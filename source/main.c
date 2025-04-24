@@ -277,8 +277,10 @@ bool help_texture_rgba_access_texel(struct texture_rgba_s * instance, int x, int
 {
    if (NULL == instance || NULL == out_color) return false;
 
+   const int FLIPPED_Y = help_texture_rgba_size(instance).y - 1 - y;
+
    int texel_index;
-   if (help_texture_rgba_2d_coords_to_linear(instance, x, y, &texel_index))
+   if (help_texture_rgba_2d_coords_to_linear(instance, x, FLIPPED_Y, &texel_index))
    {
       *out_color = instance->texels[texel_index];
       return true;
@@ -1096,11 +1098,24 @@ int main(int argc, char * argv[])
    }
 
    // Create rendering sprites
-   const struct sprite_s SPR_LIGHTEST = sprite_make(12, 2, FIELD_TILE_SIZE);
-   const struct sprite_s SPR_LIGHT = sprite_make(13, 2, FIELD_TILE_SIZE);
-   const struct sprite_s SPR_DARK = sprite_make(14, 2, FIELD_TILE_SIZE);
-   const struct sprite_s SPR_DARKEST = sprite_make(15, 2, FIELD_TILE_SIZE);
-   const struct sprite_s SPR_CELL = sprite_make(3, 6, FIELD_TILE_SIZE);
+   struct sprite_s SPRITE_TETRO_I  = sprite_make(0, 7, FIELD_TILE_SIZE);
+   struct sprite_s SPRITE_TETRO_O  = sprite_make(1, 6, FIELD_TILE_SIZE);
+   struct sprite_s SPRITE_TETRO_Lr = sprite_make(2, 6, FIELD_TILE_SIZE);
+   struct sprite_s SPRITE_TETRO_L  = sprite_make(3, 6, FIELD_TILE_SIZE);
+   struct sprite_s SPRITE_TETRO_S  = sprite_make(4, 6, FIELD_TILE_SIZE);
+   struct sprite_s SPRITE_TETRO_T  = sprite_make(5, 6, FIELD_TILE_SIZE);
+   struct sprite_s SPRITE_TETRO_Z  = sprite_make(6, 6, FIELD_TILE_SIZE);
+
+   // Sprite to tetro type mapping
+   struct sprite_s tetro_type_to_sprite[TETRO_TYPE_COUNT];
+   tetro_type_to_sprite[TETRO_TYPE_I] = SPRITE_TETRO_I;
+   tetro_type_to_sprite[TETRO_TYPE_O] = SPRITE_TETRO_O;
+   tetro_type_to_sprite[TETRO_TYPE_Lr] = SPRITE_TETRO_Lr;
+   tetro_type_to_sprite[TETRO_TYPE_L] = SPRITE_TETRO_L;
+   tetro_type_to_sprite[TETRO_TYPE_S] = SPRITE_TETRO_S;
+   tetro_type_to_sprite[TETRO_TYPE_T] = SPRITE_TETRO_T;
+   tetro_type_to_sprite[TETRO_TYPE_Z] = SPRITE_TETRO_Z;
+
 
    // Log engine status
    const int DW = 20;
@@ -1417,14 +1432,8 @@ int main(int argc, char * argv[])
             }
 
             // Field occupied
-            help_texture_rgba_plot_aabb(
-               tex_virtual,
-               fx * FIELD_TILE_SIZE,
-               fy * FIELD_TILE_SIZE,
-               FIELD_TILE_SIZE,
-               FIELD_TILE_SIZE,
-               color_rgba_make_rgba(150, 50, 50, 255)
-            );
+            const struct sprite_s TETRO_CELL_SPRITE = tetro_type_to_sprite[FIELD_CELL->type];
+            help_tex_sprite_render(TETRO_CELL_SPRITE, fx * FIELD_TILE_SIZE, fy * FIELD_TILE_SIZE, tex_sprites, tex_virtual);
          }
       }
       // ----> Active tetro
@@ -1435,13 +1444,13 @@ int main(int argc, char * argv[])
             // Design cells
             if (tetro_active.data.design[tx][ty])
             {
-               help_texture_rgba_plot_aabb(
-                  tex_virtual,
+               const struct sprite_s TETRO_CELL_SPRITE = tetro_type_to_sprite[tetro_active.data.type];
+               help_tex_sprite_render(
+                  TETRO_CELL_SPRITE,
                   (tetro_active.tile_pos.x + tx) * FIELD_TILE_SIZE,
                   (tetro_active.tile_pos.y + ty) * FIELD_TILE_SIZE,
-                  FIELD_TILE_SIZE,
-                  FIELD_TILE_SIZE,
-                  color_rgba_make_rgba(50, 50, 150, 255)
+                  tex_sprites,
+                  tex_virtual
                );
             }
 
