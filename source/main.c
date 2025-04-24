@@ -441,7 +441,8 @@ enum tetro_type_e {
    TETRO_TYPE_S,
    TETRO_TYPE_Z,
    TETRO_TYPE_T,
-   TETRO_TYPE_O
+   TETRO_TYPE_O,
+   TETRO_TYPE_COUNT
 };
 
 typedef bool tetro_mask[TETRO_MAX_SIZE][TETRO_MAX_SIZE];
@@ -576,6 +577,153 @@ struct tetro_s help_tetro_make_type_I(void)
    return tetro_I;
 }
 
+struct tetro_s help_tetro_make_type_O(void)
+{
+   struct tetro_s tetro_O = help_tetro_make_typed_unfinished(TETRO_TYPE_O, 2);
+   help_tetro_plot_design(
+      &tetro_O,
+      "##"
+      "##"
+   );
+   help_tetro_plot_left(
+      &tetro_O,
+      ".."
+      ".."
+   );
+   help_tetro_plot_right(
+      &tetro_O,
+      ".."
+      ".."
+   );
+
+   return tetro_O;
+}
+
+struct tetro_s help_tetro_make_type_Lr(void)
+{
+   struct tetro_s tetro_Lr = help_tetro_make_typed_unfinished(TETRO_TYPE_Lr, 3);
+   help_tetro_plot_design(
+      &tetro_Lr,
+      ".#."
+      ".#."
+      "##."
+   );
+   help_tetro_plot_left(
+      &tetro_Lr,
+      "..."
+      "..."
+      "..."
+   );
+   help_tetro_plot_right(
+      &tetro_Lr,
+      "..."
+      "..."
+      "..."
+   );
+
+   return tetro_Lr;
+}
+
+struct tetro_s help_tetro_make_type_L(void)
+{
+   struct tetro_s tetro_L = help_tetro_make_typed_unfinished(TETRO_TYPE_L, 3);
+   help_tetro_plot_design(
+      &tetro_L,
+      ".#."
+      ".#."
+      ".##"
+   );
+   help_tetro_plot_left(
+      &tetro_L,
+      "..."
+      "..."
+      "..."
+   );
+   help_tetro_plot_right(
+      &tetro_L,
+      "..."
+      "..."
+      "..."
+   );
+
+   return tetro_L;
+}
+
+struct tetro_s help_tetro_make_type_S(void)
+{
+   struct tetro_s tetro_S = help_tetro_make_typed_unfinished(TETRO_TYPE_S, 3);
+   help_tetro_plot_design(
+      &tetro_S,
+      "..."
+      ".##"
+      "##."
+   );
+   help_tetro_plot_left(
+      &tetro_S,
+      "..."
+      "..."
+      "..."
+   );
+   help_tetro_plot_right(
+      &tetro_S,
+      "..."
+      "..."
+      "..."
+   );
+
+   return tetro_S;
+}
+
+struct tetro_s help_tetro_make_type_Z(void)
+{
+   struct tetro_s tetro_Z = help_tetro_make_typed_unfinished(TETRO_TYPE_Z, 3);
+   help_tetro_plot_design(
+      &tetro_Z,
+      "..."
+      "##."
+      ".##"
+   );
+   help_tetro_plot_left(
+      &tetro_Z,
+      "..."
+      "..."
+      "..."
+   );
+   help_tetro_plot_right(
+      &tetro_Z,
+      "..."
+      "..."
+      "..."
+   );
+
+   return tetro_Z;
+}
+
+struct tetro_s help_tetro_make_type_T(void)
+{
+   struct tetro_s tetro_T = help_tetro_make_typed_unfinished(TETRO_TYPE_T, 3);
+   help_tetro_plot_design(
+      &tetro_T,
+      "..."
+      "###"
+      ".#."
+   );
+   help_tetro_plot_left(
+      &tetro_T,
+      "..."
+      "..."
+      "..."
+   );
+   help_tetro_plot_right(
+      &tetro_T,
+      "..."
+      "..."
+      "..."
+   );
+
+   return tetro_T;
+}
+
 void help_tetro_rotate_mask_left(tetro_mask mask, int size)
 {
    tetro_mask rotated;
@@ -643,6 +791,24 @@ struct tetro_world_s help_tetro_world_make_type_at_tile(enum tetro_type_e type, 
    {
       case TETRO_TYPE_I:
          return tetro_world_make(help_tetro_make_type_I(), tile_x, tile_y);
+         break;
+      case TETRO_TYPE_O:
+         return tetro_world_make(help_tetro_make_type_O(), tile_x, tile_y);
+         break;
+      case TETRO_TYPE_Lr:
+         return tetro_world_make(help_tetro_make_type_Lr(), tile_x, tile_y);
+         break;
+      case TETRO_TYPE_L:
+         return tetro_world_make(help_tetro_make_type_L(), tile_x, tile_y);
+         break;
+      case TETRO_TYPE_S:
+         return tetro_world_make(help_tetro_make_type_S(), tile_x, tile_y);
+         break;
+      case TETRO_TYPE_Z:
+         return tetro_world_make(help_tetro_make_type_Z(), tile_x, tile_y);
+         break;
+      case TETRO_TYPE_T:
+         return tetro_world_make(help_tetro_make_type_T(), tile_x, tile_y);
          break;
       default:
          printf("\nAttempting to spawn un-supported tetro type");
@@ -808,6 +974,25 @@ bool help_field_coords_out_of_bounds(int x, int y)
    ) ? true : false;
 }
 
+// Helpers - Spawning
+struct tetro_world_s help_tetro_world_make_random_at_spawn(void)
+{
+   const enum tetro_type_e RANDOM_TETRO_TYPE = rand() % TETRO_TYPE_COUNT;
+
+   // Make tetro at some position
+   struct tetro_world_s random_tetro = help_tetro_world_make_type_at_tile(RANDOM_TETRO_TYPE, 0, 0);
+
+   // TODO-GS: Random tetro rotation ?
+
+   // Position to spawn based on tetro size
+   const int RANDOM_TETRO_SIZE = random_tetro.data.size;
+   random_tetro.tile_pos.x = ((FIELD_WIDTH - 1) / 2) - (RANDOM_TETRO_SIZE / 2);
+   random_tetro.tile_pos.y = (FIELD_HEIGHT - 1) - (RANDOM_TETRO_SIZE / 2);
+
+   // Success
+   return random_tetro;
+}
+
 // Logic - Main
 int main(int argc, char * argv[])
 {
@@ -913,11 +1098,7 @@ int main(int argc, char * argv[])
    printf("\n\t%-*s: %s", DW, "VSYNC", SUCCESS_USE_VSYNC ? "enabled" : "disabled");
 
    // Prepare tetros
-   struct tetro_world_s tetro_active = help_tetro_world_make_type_at_tile(
-      TETRO_TYPE_I,
-      (FIELD_WIDTH / 2) - 2,
-      (VIRTUAL_SIZE.y / FIELD_TILE_SIZE) - 4
-   );
+   struct tetro_world_s tetro_active = help_tetro_world_make_random_at_spawn();
 
    // Playing field
    struct field_cell_s field[FIELD_WIDTH][FIELD_HEIGHT];
@@ -958,6 +1139,9 @@ int main(int argc, char * argv[])
          }
       }
 
+      // TODO-GS: Fix missing input and double-firing
+      help_input_determine_intermediate_state(input);
+
       // Tick
       const double NEW_TIME = help_sdl_time_in_seconds();
       const double LAST_FRAME_DURATION = help_sdl_time_in_seconds() - last_time_tick;
@@ -973,7 +1157,7 @@ int main(int argc, char * argv[])
          // Determine input state
          // @Note: Must be consumed during tick to avoid multiplying input during multiple ticks per frame
          // @Problem: Currently double firing !?
-         help_input_determine_intermediate_state(input);
+         //help_input_determine_intermediate_state(input);
 
          // Tick engine (time simulated, fixed delta time, blend factor)
          
@@ -1066,7 +1250,7 @@ int main(int argc, char * argv[])
          }
 
          // ---> Drop tetro
-         const double TIMER_TETRO_DROP = 1.0f;
+         const double TIMER_TETRO_DROP = 0.25f;
          if (help_sdl_time_in_seconds() >= (last_time_tetro_drop + TIMER_TETRO_DROP))
          {
             // Action - Drop tetro
@@ -1124,11 +1308,7 @@ int main(int argc, char * argv[])
                }
 
                // Spawn a new tetro
-               // TODO-GS: Random type + preview
-               tetro_active = help_tetro_world_make_type_at_tile(TETRO_TYPE_I,
-                  (FIELD_WIDTH / 2) - 2,
-                  (VIRTUAL_SIZE.y / FIELD_TILE_SIZE) - 4
-               );
+               tetro_active = help_tetro_world_make_random_at_spawn();
             }
             else
             {

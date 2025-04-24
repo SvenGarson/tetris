@@ -1,6 +1,7 @@
 # Next Task
-- basic gameplay: spawn cycle
 - implement rest of the shapes
+- render types of shapes from sprites according to type
+- basic gameplay: spawn cycle + randomy position + random rotation
 - random spawn cycle + placing
 - timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
 
