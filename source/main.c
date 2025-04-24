@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
+#include <ctype.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 
@@ -1075,6 +1076,7 @@ void help_font_render_sprite_at_world(
    struct texture_rgba_s * tex_target
 )
 {
+   // TODO-GS: Function is a mess in terms of cursors side effects ...
    if (NULL == instance || NULL == text)
    {
       return;
@@ -1086,9 +1088,8 @@ void help_font_render_sprite_at_world(
 
    for (const char * ch = text; *ch != '\0'; ++ch)
    {
-      // TODO-GS: Map to supported char set -> Uppercase text for now ?
-
-      const int CHAR_ASCII_CODE = (int)(*ch);
+      const char UPPERCASED = toupper(*ch);
+      const int CHAR_ASCII_CODE = (int)(UPPERCASED);
       if (help_font_render_ascii_in_valid(CHAR_ASCII_CODE))
       {
          continue;
@@ -1096,22 +1097,58 @@ void help_font_render_sprite_at_world(
 
       // Highlight un-mapped glyphs
       const struct font_render_glyph_s * GLYPH = instance->glyphs + CHAR_ASCII_CODE;
-      if (false == GLYPH->is_mapped)
+      if ('\n' == UPPERCASED)
       {
-         // TODO-GS: Highlight with pink quad or something
+         // Control character cursor side-effects
+         cursor_x = x;
+         cursor_y -= FIELD_TILE_SIZE;
+
+         // To next character
+         continue;
       }
+      else if (' ' == UPPERCASED)
+      {
+         // Control character cursor side-effects
+         cursor_x += FIELD_TILE_SIZE;
 
-      // Render the mapped glyph
-      help_tex_sprite_render(
-         GLYPH->sprite,
-         cursor_x,
-         cursor_y,
-         tex_sprite,
-         tex_target
-      );
+         // To next character
+         continue;
+      }
+      else if (false == GLYPH->is_mapped)
+      {
+         // Highlight un-mapped glyphs
+         help_texture_rgba_plot_aabb(
+            tex_target,
+            cursor_x,
+            cursor_y,
+            FIELD_TILE_SIZE,
+            FIELD_TILE_SIZE,
+            color_rgba_make_rgba(0xFF, 0x00, 0xFF, 255)
+         );
 
-      // Adjust cursor
-      cursor_x += GLYPH->sprite.texture_size.x;
+         // Add glyph width for now
+         cursor_x += FIELD_TILE_SIZE;
+
+         // To next character
+         continue;
+      }
+      else
+      {
+         // Render the mapped glyph and apply cursor side-effect based on sprite
+         help_tex_sprite_render(
+            GLYPH->sprite,
+            cursor_x,
+            cursor_y,
+            tex_sprite,
+            tex_target
+         );
+
+         // Adjust cursor
+         cursor_x += GLYPH->sprite.texture_size.x;
+
+         // To next character
+         continue;
+      }
    }
 }
 
@@ -1688,9 +1725,26 @@ int main(int argc, char * argv[])
          }
       }
       // ----> Testing font rendering
-      help_font_render_sprite_at_world(font_render, "ABCDEFGHIJKLMNOP", 0, 0, tex_sprites, tex_virtual);
-      help_font_render_sprite_at_world(font_render, "QRSTUVQXYZ", 0, FIELD_TILE_SIZE * 1, tex_sprites, tex_virtual);
-      help_font_render_sprite_at_world(font_render, "0123456789", 0, FIELD_TILE_SIZE * 2, tex_sprites, tex_virtual);
+      static float score = 0;
+      score += 0.75f;
+      char str_score[32];
+      snprintf(str_score, sizeof(str_score), "%5d", (int)score);
+      help_font_render_sprite_at_world(font_render, "SCORE", FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 16 , tex_sprites, tex_virtual);
+      help_font_render_sprite_at_world(font_render, str_score, FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 15 , tex_sprites, tex_virtual);
+
+      static float level = 3;
+      level += 0.005;
+      char str_level[32];
+      snprintf(str_level, sizeof(str_level), "%5d", (int)level);
+      help_font_render_sprite_at_world(font_render, "LEVEL", FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 13 , tex_sprites, tex_virtual);
+      help_font_render_sprite_at_world(font_render, str_level, FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 12 , tex_sprites, tex_virtual);
+
+      static float lines = 14;
+      lines += 0.1f;
+      char str_lines[32];
+      snprintf(str_lines, sizeof(str_lines), "%5d", (int)lines);
+      help_font_render_sprite_at_world(font_render, "LINES", FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 10 , tex_sprites, tex_virtual);
+      help_font_render_sprite_at_world(font_render, str_lines, FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 9 , tex_sprites, tex_virtual);
 
       // Copy offline to online texture
       const bool SUCCESS_UPDATE_TEXTURE = SDL_UpdateTexture(
