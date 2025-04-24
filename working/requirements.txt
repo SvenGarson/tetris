@@ -1,9 +1,11 @@
 # Next Task
-- implement rest of the shapes
+- initial rotations masks
 - render types of shapes from sprites according to type
 - basic gameplay: spawn cycle + randomy position + random rotation
+- change naming from left/right to CW/CCW
 - random spawn cycle + placing
 - timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
+- test rotation masks, placing, collision etc.
 
 # Goal
 Fully playable version of Tetris

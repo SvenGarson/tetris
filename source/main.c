@@ -7,6 +7,7 @@
 
 // Constants
 const char * ARG_KEY_DIR_ABS_RES = "-abs_res_dir";
+const bool DEBUG_RENDER_COLLISION_MASKS = false;
 
 // Helpers - Arguments
 const char * help_args_key_value_first(int argc, char * argv[], const char * key)
@@ -610,14 +611,14 @@ struct tetro_s help_tetro_make_type_Lr(void)
    );
    help_tetro_plot_left(
       &tetro_Lr,
-      "..."
-      "..."
-      "..."
+      "#.."
+      "#.#"
+      "..#"
    );
    help_tetro_plot_right(
       &tetro_Lr,
-      "..."
-      "..."
+      "#.#"
+      "#.#"
       "..."
    );
 
@@ -635,15 +636,15 @@ struct tetro_s help_tetro_make_type_L(void)
    );
    help_tetro_plot_left(
       &tetro_L,
-      "..."
-      "..."
+      "#.#"
+      "#.#"
       "..."
    );
    help_tetro_plot_right(
       &tetro_L,
-      "..."
-      "..."
-      "..."
+      "..#"
+      "#.#"
+      "#.."
    );
 
    return tetro_L;
@@ -660,15 +661,15 @@ struct tetro_s help_tetro_make_type_S(void)
    );
    help_tetro_plot_left(
       &tetro_S,
+      ".##"
       "..."
-      "..."
-      "..."
+      "..#"
    );
    help_tetro_plot_right(
       &tetro_S,
-      "..."
-      "..."
-      "..."
+      "#.."
+      "#.."
+      "..#"
    );
 
    return tetro_S;
@@ -685,15 +686,15 @@ struct tetro_s help_tetro_make_type_Z(void)
    );
    help_tetro_plot_left(
       &tetro_Z,
-      "..."
-      "..."
-      "..."
+      "..#"
+      "..#"
+      "#.."
    );
    help_tetro_plot_right(
       &tetro_Z,
+      "##."
       "..."
-      "..."
-      "..."
+      "#.."
    );
 
    return tetro_Z;
@@ -710,15 +711,15 @@ struct tetro_s help_tetro_make_type_T(void)
    );
    help_tetro_plot_left(
       &tetro_T,
+      ".##"
       "..."
-      "..."
-      "..."
+      "#.#"
    );
    help_tetro_plot_right(
       &tetro_T,
+      "##."
       "..."
-      "..."
-      "..."
+      "#.#"
    );
 
    return tetro_T;
@@ -1434,7 +1435,13 @@ int main(int argc, char * argv[])
                );
             }
 
-            // Left rotation
+            // Render collision shapes for debuggin ?
+            if (false == DEBUG_RENDER_COLLISION_MASKS)
+            {
+               continue;
+            }
+
+            // CCW collision mask
             if (tetro_active.data.left[tx][ty])
             {
                help_texture_rgba_plot_aabb_outline(
@@ -1447,7 +1454,7 @@ int main(int argc, char * argv[])
                );
             }
 
-            // Right rotation
+            // CW collision mask
             if (tetro_active.data.right[tx][ty])
             {
                help_texture_rgba_plot_aabb_outline(
