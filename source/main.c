@@ -2,12 +2,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <time.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 
 // Constants
 const char * ARG_KEY_DIR_ABS_RES = "-abs_res_dir";
-const bool DEBUG_RENDER_COLLISION_MASKS = false;
+const bool CONFIG_DO_RENDER_COLLISION_MASKS = false;
+const bool CONFIG_DO_SET_RANDOM_SEED = true;
 
 // Helpers - Arguments
 const char * help_args_key_value_first(int argc, char * argv[], const char * key)
@@ -725,7 +727,7 @@ struct tetro_s help_tetro_make_type_T(void)
    return tetro_T;
 }
 
-void help_tetro_rotate_mask_left(tetro_mask mask, int size)
+void help_tetro_rotate_mask_ccw(tetro_mask mask, int size)
 {
    tetro_mask rotated;
    memcpy(rotated, mask, sizeof(rotated));
@@ -743,7 +745,7 @@ void help_tetro_rotate_mask_left(tetro_mask mask, int size)
    memcpy(mask, rotated, sizeof(rotated));
 }
 
-void help_tetro_rotate_mask_right(tetro_mask mask, int size)
+void help_tetro_rotate_mask_cw(tetro_mask mask, int size)
 {
    tetro_mask rotated;
    memcpy(rotated, mask, sizeof(rotated));
@@ -761,25 +763,25 @@ void help_tetro_rotate_mask_right(tetro_mask mask, int size)
    memcpy(mask, rotated, sizeof(rotated));
 }
 
-bool help_tetro_world_rotate_left(struct tetro_world_s * tetro)
+bool help_tetro_world_rotate_ccw(struct tetro_world_s * tetro)
 {
    if (NULL == tetro) return false;
 
-   help_tetro_rotate_mask_left(tetro->data.design, tetro->data.size);
-   help_tetro_rotate_mask_left(tetro->data.left, tetro->data.size);
-   help_tetro_rotate_mask_left(tetro->data.right, tetro->data.size);
+   help_tetro_rotate_mask_ccw(tetro->data.design, tetro->data.size);
+   help_tetro_rotate_mask_ccw(tetro->data.left, tetro->data.size);
+   help_tetro_rotate_mask_ccw(tetro->data.right, tetro->data.size);
 
    // Success
    return true;
 }
 
-bool help_tetro_world_rotate_right(struct tetro_world_s * tetro)
+bool help_tetro_world_rotate_cw(struct tetro_world_s * tetro)
 {
    if (NULL == tetro) return false;
 
-   help_tetro_rotate_mask_right(tetro->data.design, tetro->data.size);
-   help_tetro_rotate_mask_right(tetro->data.left, tetro->data.size);
-   help_tetro_rotate_mask_right(tetro->data.right, tetro->data.size);
+   help_tetro_rotate_mask_cw(tetro->data.design, tetro->data.size);
+   help_tetro_rotate_mask_cw(tetro->data.left, tetro->data.size);
+   help_tetro_rotate_mask_cw(tetro->data.right, tetro->data.size);
 
    // Success
    return true;
@@ -1085,6 +1087,14 @@ int main(int argc, char * argv[])
       return EXIT_FAILURE;
    }
 
+   // Set random rand() seed ?
+   if (CONFIG_DO_SET_RANDOM_SEED)
+   {
+      // TODO-GS: Safer / Higher resolution argument for srand() ?
+      const unsigned int SEED_RANDOM = (unsigned int)SDL_GetTicks();
+      srand(SEED_RANDOM);
+   }
+
    // Create rendering sprites
    const struct sprite_s SPR_LIGHTEST = sprite_make(12, 2, FIELD_TILE_SIZE);
    const struct sprite_s SPR_LIGHT = sprite_make(13, 2, FIELD_TILE_SIZE);
@@ -1349,7 +1359,7 @@ int main(int argc, char * argv[])
                }
             }
          }
-         if (false == left_collision_occured) help_tetro_world_rotate_left(&tetro_active);
+         if (false == left_collision_occured) help_tetro_world_rotate_ccw(&tetro_active);
       }
       if (help_input_key_pressed(input, CUSTOM_KEY_A))
       {
@@ -1377,7 +1387,7 @@ int main(int argc, char * argv[])
                }
             }
          }
-         if (false == right_collision_occured) help_tetro_world_rotate_right(&tetro_active);
+         if (false == right_collision_occured) help_tetro_world_rotate_cw(&tetro_active);
       }
 
       // Render into offline texture
@@ -1436,7 +1446,7 @@ int main(int argc, char * argv[])
             }
 
             // Render collision shapes for debuggin ?
-            if (false == DEBUG_RENDER_COLLISION_MASKS)
+            if (false == CONFIG_DO_RENDER_COLLISION_MASKS)
             {
                continue;
             }
