@@ -1,7 +1,5 @@
 # Next Task
-- basic gameplay: spawn cycle + randomy position + random rotation
-- change naming from left/right to CW/CCW
-- random spawn cycle + placing
+- left and right collision on field edges
 - timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
 - test rotation masks, placing, collision etc.
 - render I tetro correcntly based on rotation

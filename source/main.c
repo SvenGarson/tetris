@@ -988,6 +988,10 @@ struct tetro_world_s help_tetro_world_make_random_at_spawn(void)
    struct tetro_world_s random_tetro = help_tetro_world_make_type_at_tile(RANDOM_TETRO_TYPE, 0, 0);
 
    // TODO-GS: Random tetro rotation ?
+   for (int rotation = 0; rotation < rand() % 8; ++rotation)
+   {
+      help_tetro_world_rotate_cw(&random_tetro);
+   }
 
    // Position to spawn based on tetro size
    const int RANDOM_TETRO_SIZE = random_tetro.data.size;
@@ -1333,8 +1337,42 @@ int main(int argc, char * argv[])
                   }
                }
 
-               // Spawn a new tetro
+               // Spawn new random tetro
                tetro_active = help_tetro_world_make_random_at_spawn();
+
+               // Check for game over on spawn
+               bool game_over = false;
+               for (int ty = 0; ty < tetro_active.data.size; ++ty)
+               {
+                  for (int tx = 0; tx < tetro_active.data.size; ++tx)
+                  {
+                     if (tetro_active.data.design[tx][ty] == false) continue;
+
+                     // Drop this tetro cell in field space
+                     const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
+                        tetro_active.tile_pos.x + tx,
+                        tetro_active.tile_pos.y + ty
+                     );
+
+                     // Ignore invalid field cells
+                     if (help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y))
+                     {
+                        continue;
+                     }
+
+                     // Spawned tetro overlap means game over
+                     if (field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y].occupied)
+                     {
+                        game_over = true;
+                     }
+                  }
+               }
+
+               // Game over ?
+               if (game_over)
+               {
+                  // TODO-GS: Handle game over !
+               }
             }
             else
             {
