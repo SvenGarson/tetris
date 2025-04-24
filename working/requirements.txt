@@ -1,8 +1,11 @@
 # Next Task
-- left and right collision on field edges
+- y revers texel of textures when rendering, but keep base coordinate system
+- sprite based text rendering
+- mockup rest of the display
+- line deletion
 - timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
 - test rotation masks, placing, collision etc.
-- render I tetro correcntly based on rotation
+- render I tetro correctly based on rotation
 
 # Goal
 Fully playable version of Tetris

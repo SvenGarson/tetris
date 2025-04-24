@@ -412,7 +412,7 @@ bool help_tex_sprite_render(struct sprite_s sprite, int x, int y, struct texture
          const bool SUCCESS_ACCESS_SOURCE_TEXEL = help_texture_rgba_access_texel(
             texture_sprite,
             sprite.texture_min.x + spr_x,
-            sprite.texture_min.y + spr_y,
+            sprite.texture_min.y + sprite.texture_size.y - 1 - spr_y,
             &source_texel_color
          );
          const color_rgba_t SAFE_SOURCE_TEXEL_COLOR = SUCCESS_ACCESS_SOURCE_TEXEL ? source_texel_color : color_rgba_make_rgba(0xFF, 0x00, 0xFF, 0xFF);
@@ -1002,6 +1002,119 @@ struct tetro_world_s help_tetro_world_make_random_at_spawn(void)
    return random_tetro;
 }
 
+// Helper - Font rendering
+struct font_render_glyph_s {
+   bool is_mapped;
+   struct sprite_s sprite;
+};
+
+#define FONT_RENDER_MAX_GLYPHS (256)
+struct font_render_s {
+   struct font_render_glyph_s glyphs[FONT_RENDER_MAX_GLYPHS];
+};
+
+struct font_render_glyph_s font_render_glyph_make(bool is_mapped, struct sprite_s sprite)
+{
+   struct font_render_glyph_s glyph;
+
+   glyph.is_mapped = is_mapped;
+   glyph.sprite = sprite;
+
+   return glyph;
+}
+
+void help_font_render_destroy(struct font_render_s * instance)
+{
+   if (instance)
+   {
+      free(instance);
+   }
+}
+
+struct font_render_s * help_font_render_create(void)
+{
+   struct font_render_s * instance = malloc(sizeof(struct font_render_s));
+   
+   if (instance)
+   {
+      for (int ascii_code = 0; ascii_code < FONT_RENDER_MAX_GLYPHS; ++ascii_code)
+      {
+         instance->glyphs[ascii_code].is_mapped = false;
+      }
+   }
+
+   return instance;
+}
+   
+bool help_font_render_ascii_in_valid(int ascii_code)
+{
+   return (
+      ascii_code < 0 ||
+      ascii_code >= FONT_RENDER_MAX_GLYPHS
+   ) ? true : false;
+}
+
+bool help_font_render_register_glyph(struct font_render_s * instance, char glyph_char, struct sprite_s sprite)
+{
+   const int ASCII_CODE = (int)glyph_char;
+   if (NULL == instance || help_font_render_ascii_in_valid(ASCII_CODE)) return false;
+
+   // Register and map glyph to sprite
+   instance->glyphs[ASCII_CODE] = font_render_glyph_make(true, sprite);
+
+   // Success
+   return true;
+}
+
+void help_font_render_sprite_at_world(
+   struct font_render_s * instance,
+   const char * text,
+   int x,
+   int y,
+   struct texture_rgba_s * tex_sprite,
+   struct texture_rgba_s * tex_target
+)
+{
+   if (NULL == instance || NULL == text)
+   {
+      return;
+   }
+
+   // TODO-GS: Control chars ? Non-mapped pink quad or sprite ?
+   int cursor_x = x;
+   int cursor_y = y;
+
+   for (const char * ch = text; *ch != '\0'; ++ch)
+   {
+      // TODO-GS: Map to supported char set -> Uppercase text for now ?
+
+      const int CHAR_ASCII_CODE = (int)(*ch);
+      if (help_font_render_ascii_in_valid(CHAR_ASCII_CODE))
+      {
+         continue;
+      }
+
+      // Highlight un-mapped glyphs
+      const struct font_render_glyph_s * GLYPH = instance->glyphs + CHAR_ASCII_CODE;
+      if (false == GLYPH->is_mapped)
+      {
+         // TODO-GS: Highlight with pink quad or something
+      }
+
+      // Render the mapped glyph
+      help_tex_sprite_render(
+         GLYPH->sprite,
+         cursor_x,
+         cursor_y,
+         tex_sprite,
+         tex_target
+      );
+
+      // Adjust cursor
+      cursor_x += GLYPH->sprite.texture_size.x;
+   }
+}
+
 // Logic - Main
 int main(int argc, char * argv[])
 {
@@ -1120,8 +1233,56 @@ int main(int argc, char * argv[])
    tetro_type_to_sprite[TETRO_TYPE_T] = SPRITE_TETRO_T;
    tetro_type_to_sprite[TETRO_TYPE_Z] = SPRITE_TETRO_Z;
 
+   // Setup text rendering
+   struct font_render_s * font_render = help_font_render_create();
+   if (NULL == font_render)
+   {
+      printf("\nFailed to create font render");
+      return EXIT_FAILURE;
+   }
+
+   // Register font rendering glyphs
+   help_font_render_register_glyph(font_render, 'A', sprite_make(0, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'B', sprite_make(1, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'C', sprite_make(2, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'D', sprite_make(3, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'E', sprite_make(4, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'F', sprite_make(5, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'G', sprite_make(6, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'H', sprite_make(7, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'I', sprite_make(8, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'J', sprite_make(9, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'K', sprite_make(10, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'L', sprite_make(11, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'M', sprite_make(12, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'N', sprite_make(13, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'O', sprite_make(14, 0, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'P', sprite_make(15, 0, FIELD_TILE_SIZE));
+
+   help_font_render_register_glyph(font_render, 'Q', sprite_make(0, 1, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'R', sprite_make(1, 1, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'S', sprite_make(2, 1, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'T', sprite_make(3, 1, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'U', sprite_make(4, 1, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'V', sprite_make(5, 1, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'W', sprite_make(6, 1, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'X', sprite_make(7, 1, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'Y', sprite_make(8, 1, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, 'Z', sprite_make(9, 1, FIELD_TILE_SIZE));
+
+   help_font_render_register_glyph(font_render, '0', sprite_make(0, 2, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, '1', sprite_make(1, 2, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, '2', sprite_make(2, 2, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, '3', sprite_make(3, 2, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, '4', sprite_make(4, 2, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, '5', sprite_make(5, 2, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, '6', sprite_make(6, 2, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, '7', sprite_make(7, 2, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, '8', sprite_make(8, 2, FIELD_TILE_SIZE));
+   help_font_render_register_glyph(font_render, '9', sprite_make(9, 2, FIELD_TILE_SIZE));
 
    // Log engine status
+   // TODO-GS: Config symbols
    const int DW = 20;
    printf("\n\nEngine Information");
    printf("\n\t%-*s: %s", DW, "resource directory", DIR_ABS_RES);
@@ -1372,6 +1533,7 @@ int main(int argc, char * argv[])
                if (game_over)
                {
                   // TODO-GS: Handle game over !
+                  printf("\nGame Over !!!");
                }
             }
             else
@@ -1525,6 +1687,10 @@ int main(int argc, char * argv[])
             }
          }
       }
+      // ----> Testing font rendering
+      help_font_render_sprite_at_world(font_render, "ABCDEFGHIJKLMNOP", 0, 0, tex_sprites, tex_virtual);
+      help_font_render_sprite_at_world(font_render, "QRSTUVQXYZ", 0, FIELD_TILE_SIZE * 1, tex_sprites, tex_virtual);
+      help_font_render_sprite_at_world(font_render, "0123456789", 0, FIELD_TILE_SIZE * 2, tex_sprites, tex_virtual);
 
       // Copy offline to online texture
       const bool SUCCESS_UPDATE_TEXTURE = SDL_UpdateTexture(
@@ -1579,6 +1745,7 @@ int main(int argc, char * argv[])
    }
 
    // Cleanup custom
+   help_font_render_destroy(font_render);
    help_input_destroy(input);
    help_texture_rgba_destroy(tex_virtual);
    help_texture_rgba_destroy(tex_sprites);
