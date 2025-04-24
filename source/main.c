@@ -1535,6 +1535,9 @@ int main(int argc, char * argv[])
                   }
                }
 
+               // Check for line deletion in the range the last piece was just droped
+
+
                // Spawn new random tetro
                tetro_active = help_tetro_world_make_random_at_spawn();
 

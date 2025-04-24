@@ -1,6 +1,4 @@
 # Next Task
-- y revers texel of textures when rendering, but keep base coordinate system
-- sprite based text rendering
 - mockup rest of the display
 - line deletion
 - timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
