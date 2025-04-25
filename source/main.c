@@ -952,13 +952,14 @@ bool help_input_key_pressed_or_held(struct input_s * input, enum custom_key_e ke
 }
 
 // Helper - Field
+const int FIELD_TILE_SIZE = 8;
+const int FIELD_OFFSET_HORI_IN_TILES = 1;
 #define FIELD_WIDTH (10)
 #define FIELD_HEIGHT (18)
 struct field_cell_s {
    enum tetro_type_e type;
    bool occupied;
 };
-const int FIELD_TILE_SIZE = 8;
 
 struct field_cell_s field_cell_make(enum tetro_type_e type, bool occupied)
 {
@@ -1152,6 +1153,73 @@ void help_font_render_sprite_at_world(
    }
 }
 
+// Helpers - Border rendering
+enum sprite_map_tile_e {
+   SPRITE_MAP_TILE_BORDER_HORI,
+   SPRITE_MAP_TILE_BORDER_VERTI,
+   SPRITE_MAP_TILE_BORDER_CORNER_TL,
+   SPRITE_MAP_TILE_BORDER_CORNER_TR,
+   SPRITE_MAP_TILE_BORDER_CORNER_BL,
+   SPRITE_MAP_TILE_BORDER_CORNER_BR,
+   SPRITE_MAP_TILE_BRICK,
+   SPRITE_MAP_TILE_SOLID,
+   SPRITE_MAP_TILE_COUNT
+};
+
+struct sprite_map_s {
+   struct sprite_s tile_to_sprite[SPRITE_MAP_TILE_COUNT];
+};
+
+bool help_sprite_map_tile(struct sprite_map_s * instance, enum sprite_map_tile_e tile, struct sprite_s sprite)
+{
+   if (NULL == instance) return false;
+
+   instance->tile_to_sprite[tile] = sprite;
+
+   return true;
+}
+
+struct sprite_map_s * help_sprite_map_create(void)
+{
+
+   return malloc(sizeof(struct sprite_map_s));
+}
+
+struct sprite_s help_sprite_map_sprite_for(const struct sprite_map_s * instance, enum sprite_map_tile_e tile)
+{
+   if (NULL == instance) return sprite_make(13, 13, FIELD_TILE_SIZE);
+
+   // Assume that all tiles are mapped for now
+   return instance->tile_to_sprite[tile];
+}
+
+// Helpers - Regions
+struct region_2d_s {
+   struct vec_2i_s min;
+   struct vec_2i_s max;
+   struct vec_2i_s size;
+};
+
+struct region_2d_s region_2d_s_make(int min_x, int min_y, int width, int height)
+{
+   struct region_2d_s region;
+
+   region.min = vec_2i_make_xy(min_x, min_y);
+   region.size = vec_2i_make_xy(width, height);
+   region.max = vec_2i_make_xy(
+      min_x
+   );
+}
+
+// Helpers - Rendering borders
+void help_border_render(const struct sprite_map_s * sprite_map, int border_min_tile_x, int border_min_tile_y, int width_in_tiles, int height_in_tiles)
+{
+   // Determine tiled border region
+
+   // Render the thing
+   // ???
+}
+
 // Logic - Main
 int main(int argc, char * argv[])
 {
@@ -1269,6 +1337,22 @@ int main(int argc, char * argv[])
    tetro_type_to_sprite[TETRO_TYPE_S] = SPRITE_TETRO_S;
    tetro_type_to_sprite[TETRO_TYPE_T] = SPRITE_TETRO_T;
    tetro_type_to_sprite[TETRO_TYPE_Z] = SPRITE_TETRO_Z;
+
+   // More sprite stuff
+   struct sprite_map_s * sprite_map = help_sprite_map_create();
+   if (NULL == sprite_map)
+   {
+      printf("\nFailed to create sprite map");
+      return EXIT_FAILURE;
+   }
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BORDER_HORI, sprite_make(3, 3, FIELD_TILE_SIZE));
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BORDER_VERTI, sprite_make(2, 4, FIELD_TILE_SIZE));
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BORDER_CORNER_TL, sprite_make(2, 3, FIELD_TILE_SIZE));
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BORDER_CORNER_TR, sprite_make(4, 3, FIELD_TILE_SIZE));
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BORDER_CORNER_BL, sprite_make(2, 5, FIELD_TILE_SIZE));
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BORDER_CORNER_BR, sprite_make(4, 5, FIELD_TILE_SIZE));
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BRICK, sprite_make(0, 4, FIELD_TILE_SIZE));
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_SOLID, sprite_make(1, 4, FIELD_TILE_SIZE));
 
    // Setup text rendering
    struct font_render_s * font_render = help_font_render_create();
@@ -1754,7 +1838,7 @@ int main(int argc, char * argv[])
       // -> Clear
       help_texture_rgba_clear(tex_virtual, color_rgba_make_rgba(50, 50, 50, 255));
       // -> Render scene
-      // ----> Playing field
+      // ----> Playing field with horizontal offset
       for (int fy = 0; fy < FIELD_HEIGHT; ++fy)
       {
          for (int fx = 0; fx < FIELD_WIDTH; ++fx)
@@ -1762,7 +1846,7 @@ int main(int argc, char * argv[])
             // Background
             help_texture_rgba_plot_aabb(
                tex_virtual,
-               fx * FIELD_TILE_SIZE,
+               (FIELD_OFFSET_HORI_IN_TILES + fx) * FIELD_TILE_SIZE,
                fy * FIELD_TILE_SIZE,
                FIELD_TILE_SIZE,
                FIELD_TILE_SIZE,
@@ -1778,10 +1862,10 @@ int main(int argc, char * argv[])
 
             // Field occupied
             const struct sprite_s TETRO_CELL_SPRITE = tetro_type_to_sprite[FIELD_CELL->type];
-            help_tex_sprite_render(TETRO_CELL_SPRITE, fx * FIELD_TILE_SIZE, fy * FIELD_TILE_SIZE, tex_sprites, tex_virtual);
+            help_tex_sprite_render(TETRO_CELL_SPRITE, (FIELD_OFFSET_HORI_IN_TILES + fx) * FIELD_TILE_SIZE, fy * FIELD_TILE_SIZE, tex_sprites, tex_virtual);
          }
       }
-      // ----> Active tetro
+      // ----> Active tetro with horizontal field offset
       for (int ty = 0; ty < tetro_active.data.size; ++ty)
       {
          for (int tx = 0; tx < tetro_active.data.size; ++tx)
@@ -1792,7 +1876,7 @@ int main(int argc, char * argv[])
                const struct sprite_s TETRO_CELL_SPRITE = tetro_type_to_sprite[tetro_active.data.type];
                help_tex_sprite_render(
                   TETRO_CELL_SPRITE,
-                  (tetro_active.tile_pos.x + tx) * FIELD_TILE_SIZE,
+                  (tetro_active.tile_pos.x + FIELD_OFFSET_HORI_IN_TILES + tx) * FIELD_TILE_SIZE,
                   (tetro_active.tile_pos.y + ty) * FIELD_TILE_SIZE,
                   tex_sprites,
                   tex_virtual
@@ -1810,7 +1894,7 @@ int main(int argc, char * argv[])
             {
                help_texture_rgba_plot_aabb_outline(
                   tex_virtual,
-                  (tetro_active.tile_pos.x + tx) * FIELD_TILE_SIZE,
+                  (tetro_active.tile_pos.x + FIELD_OFFSET_HORI_IN_TILES + tx) * FIELD_TILE_SIZE,
                   (tetro_active.tile_pos.y + ty) * FIELD_TILE_SIZE,
                   FIELD_TILE_SIZE,
                   FIELD_TILE_SIZE,
@@ -1823,7 +1907,7 @@ int main(int argc, char * argv[])
             {
                help_texture_rgba_plot_aabb_outline(
                   tex_virtual,
-                  (tetro_active.tile_pos.x + tx) * FIELD_TILE_SIZE + 1,
+                  (tetro_active.tile_pos.x + FIELD_OFFSET_HORI_IN_TILES + tx) * FIELD_TILE_SIZE + 1,
                   (tetro_active.tile_pos.y + ty) * FIELD_TILE_SIZE + 1,
                   FIELD_TILE_SIZE - 2,
                   FIELD_TILE_SIZE - 2,
@@ -1832,7 +1916,8 @@ int main(int argc, char * argv[])
             }
          }
       }
-      // ----> Testing font rendering
+      // ----> Next tetro preview
+      // ----> Game stats
       static float score = 0;
       score += 0.75f;
       char str_score[32];
@@ -1853,6 +1938,26 @@ int main(int argc, char * argv[])
       snprintf(str_lines, sizeof(str_lines), "%5d", (int)lines);
       help_font_render_sprite_at_world(font_render, "LINES", FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 10 , tex_sprites, tex_virtual);
       help_font_render_sprite_at_world(font_render, str_lines, FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 9 , tex_sprites, tex_virtual);
+
+      // ----> Field bricks
+      for (int field_brick_y = 0; field_brick_y < VIRTUAL_SIZE.y / FIELD_TILE_SIZE; ++field_brick_y)
+      {
+         help_tex_sprite_render(
+            help_sprite_map_sprite_for(sprite_map, SPRITE_MAP_TILE_BRICK),
+            (FIELD_OFFSET_HORI_IN_TILES - 1) * FIELD_TILE_SIZE,
+            field_brick_y * FIELD_TILE_SIZE,
+            tex_sprites,
+            tex_virtual
+         );
+
+         help_tex_sprite_render(
+            help_sprite_map_sprite_for(sprite_map, SPRITE_MAP_TILE_BRICK),
+            (FIELD_OFFSET_HORI_IN_TILES + FIELD_WIDTH) * FIELD_TILE_SIZE,
+            field_brick_y * FIELD_TILE_SIZE,
+            tex_sprites,
+            tex_virtual
+         );
+      }
 
       // Copy offline to online texture
       const bool SUCCESS_UPDATE_TEXTURE = SDL_UpdateTexture(
@@ -1907,6 +2012,7 @@ int main(int argc, char * argv[])
    }
 
    // Cleanup custom
+   free(sprite_map);
    help_font_render_destroy(font_render);
    help_input_destroy(input);
    help_texture_rgba_destroy(tex_virtual);
