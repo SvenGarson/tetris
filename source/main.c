@@ -1351,6 +1351,7 @@ int main(int argc, char * argv[])
 
    // Sub-tick timers
    double last_time_tetro_drop = help_sdl_time_in_seconds();
+   double last_time_tetro_player_drop = help_sdl_time_in_seconds();
    double last_time_tetro_move_hori = help_sdl_time_in_seconds();
 
    // Game loop
@@ -1477,8 +1478,8 @@ int main(int argc, char * argv[])
             last_time_tetro_move_hori = help_sdl_time_in_seconds();
          }
 
-         // ---> Drop tetro
-         const double TIMER_TETRO_DROP = 0.25f;
+         // ---> Tetro auto drop
+         const double TIMER_TETRO_DROP = 0.75f;
          if (help_sdl_time_in_seconds() >= (last_time_tetro_drop + TIMER_TETRO_DROP))
          {
             // Action - Drop tetro
@@ -1508,7 +1509,7 @@ int main(int argc, char * argv[])
                }
             }
 
-            // Place or drop ?
+            // Action - Tetro place into field on drop collision
             if (drop_collision_occured)
             {
                // Drop the tetro because of drop collision
@@ -1534,9 +1535,6 @@ int main(int argc, char * argv[])
                      field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y] = field_cell_make(tetro_active.data.type, true);
                   }
                }
-
-               // Check for line deletion in the range the last piece was just droped
-
 
                // Spawn new random tetro
                tetro_active = help_tetro_world_make_random_at_spawn();
@@ -1573,16 +1571,123 @@ int main(int argc, char * argv[])
                if (game_over)
                {
                   // TODO-GS: Handle game over !
-                  printf("\nGame Over !!!");
+                  printf("\nGame Over (Auto drop)");
                }
             }
             else
             {
+               // No drop collision
+               --tetro_active.tile_pos.y;
+            }
+
+            // Update timer
+            last_time_tetro_drop = help_sdl_time_in_seconds();
+         }
+
+         // ---> Tetro player drop
+         const double TIMER_TETRO_PLAYER_DROP = 0.05f;
+         if (help_input_key_pressed_or_held(input, CUSTOM_KEY_DOWN) && help_sdl_time_in_seconds() >= (last_time_tetro_player_drop + TIMER_TETRO_PLAYER_DROP))
+         {
+            // Will tetro collide ?
+            bool player_drop_collision_occured = false;
+            for (int ty = 0; ty < tetro_active.data.size; ++ty)
+            {
+               for (int tx = 0; tx < tetro_active.data.size; ++tx)
+               {
+                  const bool TETRO_DESIGN_CELL_PLOTTED = tetro_active.data.design[tx][ty];
+                  if (false == TETRO_DESIGN_CELL_PLOTTED) continue;
+
+                  // Any overlap causes the tetro to be dropped
+                  // Check for collision one block under the current design position
+                  const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
+                     tetro_active.tile_pos.x + tx,
+                     tetro_active.tile_pos.y + ty - 1
+                  );
+
+                  // Collision with occupied cell or out-of-field bounds ?
+                  const bool OUT_OF_BOUNDS_COLLISION = help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y);
+                  const bool FIELD_CELL_OCCUPIED = field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y].occupied;
+                  if (OUT_OF_BOUNDS_COLLISION || FIELD_CELL_OCCUPIED)
+                  {
+                     // Break out of both loops more cleany - As we know the rotation is not possible
+                     player_drop_collision_occured = true;
+                  }
+               }
+            }
+
+            // Action - Tetro place into field on drop collision
+            if (player_drop_collision_occured)
+            {
+               // Drop the tetro because of drop collision
+               for (int ty = 0; ty < tetro_active.data.size; ++ty)
+               {
+                  for (int tx = 0; tx < tetro_active.data.size; ++tx)
+                  {
+                     if (tetro_active.data.design[tx][ty] == false) continue;
+
+                     // Drop this tetro cell in field space
+                     const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
+                        tetro_active.tile_pos.x + tx,
+                        tetro_active.tile_pos.y + ty
+                     );
+
+                     // Ignore invalid field cells
+                     if (help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y))
+                     {
+                        continue;
+                     }
+
+                     // Safe to place tetro cell
+                     field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y] = field_cell_make(tetro_active.data.type, true);
+                  }
+               }
+
+               // Spawn new random tetro
+               tetro_active = help_tetro_world_make_random_at_spawn();
+
+               // Check for game over on spawn
+               bool game_over = false;
+               for (int ty = 0; ty < tetro_active.data.size; ++ty)
+               {
+                  for (int tx = 0; tx < tetro_active.data.size; ++tx)
+                  {
+                     if (tetro_active.data.design[tx][ty] == false) continue;
+
+                     // Drop this tetro cell in field space
+                     const struct vec_2i_s TETRO_CELL_FIELD_POS = vec_2i_make_xy(
+                        tetro_active.tile_pos.x + tx,
+                        tetro_active.tile_pos.y + ty
+                     );
+
+                     // Ignore invalid field cells
+                     if (help_field_coords_out_of_bounds(TETRO_CELL_FIELD_POS.x, TETRO_CELL_FIELD_POS.y))
+                     {
+                        continue;
+                     }
+
+                     // Spawned tetro overlap means game over
+                     if (field[TETRO_CELL_FIELD_POS.x][TETRO_CELL_FIELD_POS.y].occupied)
+                     {
+                        game_over = true;
+                     }
+                  }
+               }
+
+               // Game over ?
+               if (game_over)
+               {
+                  // TODO-GS: Handle game over !
+                  printf("\nGame Over (from Player drop)");
+               }
+            }
+            else
+            {
+               // No player drop collision
                --tetro_active.tile_pos.y;
             }
 
             // Timer
-            last_time_tetro_drop = help_sdl_time_in_seconds();
+            last_time_tetro_player_drop = help_sdl_time_in_seconds();
          }
       }
 
