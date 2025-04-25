@@ -1,6 +1,4 @@
 # Next Task
-- new border function
-- mockup rest of the display
 - line deletion
 - timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
 - test rotation masks, placing, collision etc.

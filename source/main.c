@@ -1181,7 +1181,6 @@ bool help_sprite_map_tile(struct sprite_map_s * instance, enum sprite_map_tile_e
 
 struct sprite_map_s * help_sprite_map_create(void)
 {
-
    return malloc(sizeof(struct sprite_map_s));
 }
 
@@ -1207,17 +1206,102 @@ struct region_2d_s region_2d_s_make(int min_x, int min_y, int width, int height)
    region.min = vec_2i_make_xy(min_x, min_y);
    region.size = vec_2i_make_xy(width, height);
    region.max = vec_2i_make_xy(
-      min_x
+      min_x + width - 1,
+      min_y + height - 1
    );
+
+   return region;
 }
 
 // Helpers - Rendering borders
-void help_border_render(const struct sprite_map_s * sprite_map, int border_min_tile_x, int border_min_tile_y, int width_in_tiles, int height_in_tiles)
+void help_border_render(
+   const struct sprite_map_s * sprite_map,
+   int border_min_tile_x,
+   int border_min_tile_y,
+   int width_in_tiles,
+   int height_in_tiles,
+   struct texture_rgba_s * tex_sprites,
+   struct texture_rgba_s * tex_target
+)
 {
+   if (NULL == tex_sprites || NULL == tex_target) return;
+
    // Determine tiled border region
+   const struct region_2d_s TILED_BORDER_REGION = region_2d_s_make(border_min_tile_x, border_min_tile_y, width_in_tiles, height_in_tiles);
 
    // Render the thing
-   // ???
+   for (int by = TILED_BORDER_REGION.min.y; by <= TILED_BORDER_REGION.max.y; ++by)
+   {
+      for (int bx = TILED_BORDER_REGION.min.x; bx <= TILED_BORDER_REGION.max.x; ++bx)
+      {
+         if (bx == TILED_BORDER_REGION.min.x && by == TILED_BORDER_REGION.min.y)
+         {
+            // Bottom-left corner
+            help_tex_sprite_render(
+               help_sprite_map_sprite_for(sprite_map, SPRITE_MAP_TILE_BORDER_CORNER_BL),
+               bx * FIELD_TILE_SIZE,
+               by * FIELD_TILE_SIZE,
+               tex_sprites,
+               tex_target
+            );
+         }
+         else if (bx == TILED_BORDER_REGION.max.x && by == TILED_BORDER_REGION.min.y)
+         {
+            // Bottom-right corner
+            help_tex_sprite_render(
+               help_sprite_map_sprite_for(sprite_map, SPRITE_MAP_TILE_BORDER_CORNER_BR),
+               bx * FIELD_TILE_SIZE,
+               by * FIELD_TILE_SIZE,
+               tex_sprites,
+               tex_target
+            );
+         }
+         else if (bx == TILED_BORDER_REGION.max.x && by == TILED_BORDER_REGION.max.y)
+         {
+            // Top-right corner
+            help_tex_sprite_render(
+               help_sprite_map_sprite_for(sprite_map, SPRITE_MAP_TILE_BORDER_CORNER_TR),
+               bx * FIELD_TILE_SIZE,
+               by * FIELD_TILE_SIZE,
+               tex_sprites,
+               tex_target
+            );
+         }
+         else if (bx == TILED_BORDER_REGION.min.x && by == TILED_BORDER_REGION.max.y)
+         {
+            // Top-left corner
+            help_tex_sprite_render(
+               help_sprite_map_sprite_for(sprite_map, SPRITE_MAP_TILE_BORDER_CORNER_TL),
+               bx * FIELD_TILE_SIZE,
+               by * FIELD_TILE_SIZE,
+               tex_sprites,
+               tex_target
+            );
+         }
+         else if (bx == TILED_BORDER_REGION.min.x || bx == TILED_BORDER_REGION.max.x)
+         {
+            // Left or right vertical edge
+            help_tex_sprite_render(
+               help_sprite_map_sprite_for(sprite_map, SPRITE_MAP_TILE_BORDER_VERTI),
+               bx * FIELD_TILE_SIZE,
+               by * FIELD_TILE_SIZE,
+               tex_sprites,
+               tex_target
+            );
+         }
+         else if (by == TILED_BORDER_REGION.min.y || by == TILED_BORDER_REGION.max.y)
+         {
+            // Top or bottom horizontal edge
+            help_tex_sprite_render(
+               help_sprite_map_sprite_for(sprite_map, SPRITE_MAP_TILE_BORDER_HORI),
+               bx * FIELD_TILE_SIZE,
+               by * FIELD_TILE_SIZE,
+               tex_sprites,
+               tex_target
+            );
+         }
+      }
+   }
 }
 
 // Logic - Main
@@ -1852,7 +1936,7 @@ int main(int argc, char * argv[])
                FIELD_TILE_SIZE,
                color_rgba_make_rgba(125, 125, 125, 255)
             );
-            
+
             // Placed cells
             const struct field_cell_s * FIELD_CELL = &field[fx][fy];
             if (false == FIELD_CELL->occupied)
@@ -1916,7 +2000,6 @@ int main(int argc, char * argv[])
             }
          }
       }
-      // ----> Next tetro preview
       // ----> Game stats
       static float score = 0;
       score += 0.75f;
@@ -1924,20 +2007,26 @@ int main(int argc, char * argv[])
       snprintf(str_score, sizeof(str_score), "%5d", (int)score);
       help_font_render_sprite_at_world(font_render, "SCORE", FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 16 , tex_sprites, tex_virtual);
       help_font_render_sprite_at_world(font_render, str_score, FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 15 , tex_sprites, tex_virtual);
+      help_border_render(sprite_map, 13, 14, 7, 4, tex_sprites, tex_virtual);
 
       static float level = 3;
       level += 0.005;
       char str_level[32];
       snprintf(str_level, sizeof(str_level), "%5d", (int)level);
-      help_font_render_sprite_at_world(font_render, "LEVEL", FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 13 , tex_sprites, tex_virtual);
-      help_font_render_sprite_at_world(font_render, str_level, FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 12 , tex_sprites, tex_virtual);
+      help_font_render_sprite_at_world(font_render, "LEVEL", FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 12 , tex_sprites, tex_virtual);
+      help_font_render_sprite_at_world(font_render, str_level, FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 11 , tex_sprites, tex_virtual);
+      help_border_render(sprite_map, 13, 10, 7, 4, tex_sprites, tex_virtual);
 
       static float lines = 14;
       lines += 0.1f;
       char str_lines[32];
       snprintf(str_lines, sizeof(str_lines), "%5d", (int)lines);
-      help_font_render_sprite_at_world(font_render, "LINES", FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 10 , tex_sprites, tex_virtual);
-      help_font_render_sprite_at_world(font_render, str_lines, FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 9 , tex_sprites, tex_virtual);
+      help_font_render_sprite_at_world(font_render, "LINES", FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 8 , tex_sprites, tex_virtual);
+      help_font_render_sprite_at_world(font_render, str_lines, FIELD_TILE_SIZE * 14, FIELD_TILE_SIZE * 7 , tex_sprites, tex_virtual);
+      help_border_render(sprite_map, 13, 6, 7, 4, tex_sprites, tex_virtual);
+
+      // ----> Next tetro preview
+      help_border_render(sprite_map, 13, 0, 6, 6, tex_sprites, tex_virtual);
 
       // ----> Field bricks
       for (int field_brick_y = 0; field_brick_y < VIRTUAL_SIZE.y / FIELD_TILE_SIZE; ++field_brick_y)
