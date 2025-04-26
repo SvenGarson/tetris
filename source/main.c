@@ -1024,6 +1024,7 @@ enum sprite_map_tile_e {
    SPRITE_MAP_TILE_TETRO_BLOCK_T,
    SPRITE_MAP_TILE_TETRO_BLOCK_Z,
    SPRITE_MAP_TILE_BRICK,
+   SPRITE_MAP_TILE_HIGHLIGHT,
    SPRITE_MAP_TILE_NA,
    SPRITE_MAP_TILE_COUNT
 };
@@ -1408,10 +1409,16 @@ bool help_tetro_move_collides(const struct tetro_world_s * TETRO, struct play_fi
    return false;
 }
 
-bool help_tetro_plot(const struct tetro_world_s * TETRO, struct play_field_s * play_field)
-{
-   if (NULL == TETRO || NULL == play_field) return false;
 
+bool help_tetro_plot(const struct tetro_world_s * TETRO, struct play_field_s * play_field, int * out_plot_row_min, int * out_plot_row_max)
+{
+   if (NULL == TETRO || NULL == play_field || NULL == out_plot_row_min || NULL == out_plot_row_max) return false;
+
+   // Keep track of play field region plotted for line deletion
+   int plot_row_min = 0;
+   int plot_row_max = PLAY_FIELD_HEIGHT - 1;
+
+   // Plotting
    for (int ty = 0; ty < TETRO->data.size; ++ty)
    {
       for (int tx = 0; tx < TETRO->data.size; ++tx)
@@ -1442,11 +1449,81 @@ bool help_tetro_plot(const struct tetro_world_s * TETRO, struct play_field_s * p
 
          // Plot design cell into the play field
          play_field->cells[TETRO_TILE_CELL_POS.x][TETRO_TILE_CELL_POS.y] = help_play_field_cell_make(TETRO->data.type, true);
+
+         // Keep track of plotted row range
+         if (TETRO_TILE_CELL_POS.y < plot_row_max)
+         {
+            plot_row_max = TETRO_TILE_CELL_POS.y;
+         }
+         if (TETRO_TILE_CELL_POS.y > plot_row_min)
+         {
+            plot_row_min = TETRO_TILE_CELL_POS.y;
+         }
       }
    }
 
+   // Communicate plot region
+   *out_plot_row_min = plot_row_max;
+   *out_plot_row_max = plot_row_min;
+
    // Success
    return true;
+}
+
+// Helpers - Lists
+struct list_of_rows_s {
+   int list[PLAY_FIELD_HEIGHT];
+   int count;
+};
+
+struct list_of_rows_s list_of_rows_make_empty(void)
+{
+   struct list_of_rows_s lor;
+
+   lor.count = 0;
+
+   return lor;
+}
+
+bool list_of_rows_append(struct list_of_rows_s * lor, int row)
+{
+   if (NULL == lor || lor->count >= PLAY_FIELD_HEIGHT) return false;
+
+   lor->list[lor->count++] = row;
+
+   return true;
+}
+
+// Helpers - Line deletion
+struct list_of_rows_s help_play_field_list_of_full_rows(struct play_field_s * play_field)
+{
+   struct list_of_rows_s lor = list_of_rows_make_empty();
+   if (NULL == play_field) return lor;
+
+   for (int row = 0; row < PLAY_FIELD_HEIGHT; ++row)
+   {
+      // Row full ?
+      int occupied_columns = 0;
+      for (int col = 0; col < PLAY_FIELD_WIDTH; ++col)
+      {
+         if (play_field->cells[col][row].occupied)
+         {
+            ++occupied_columns;
+         }
+      }
+
+      if (PLAY_FIELD_WIDTH == occupied_columns)
+      {
+         const bool ROW_ADDED = list_of_rows_append(&lor, row);
+         if (false == ROW_ADDED)
+         {
+            // This should never occur
+            printf("\nFull play field row %d could not be added to full list of rows !", row);
+         }
+      }
+   }
+
+   return lor;
 }
 
 // Logic - Main
@@ -1587,6 +1664,7 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_Z, 6, 6);
 
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BRICK, 0, 4);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_HIGHLIGHT, 12, 2);   
 
    // Package engine components
    struct engine_s engine;
@@ -1606,6 +1684,7 @@ int main(int argc, char * argv[])
    double time_last_tetro_drop = help_sdl_time_in_seconds();
    double time_last_tetro_player_move = help_sdl_time_in_seconds();
    double time_last_tetro_player_drop = help_sdl_time_in_seconds();
+   double time_last_removal_flash_timer = help_sdl_time_in_seconds();
    // Game loop
    bool tetris_close_requested = false;
    while (false == tetris_close_requested)
@@ -1619,6 +1698,9 @@ int main(int argc, char * argv[])
             tetris_close_requested = true;
          }
       }
+
+      // Shared game state transition data points
+      int plot_row_min, plot_row_max;
 
       // Tick
       const double NEW_TIME = help_sdl_time_in_seconds();
@@ -1669,10 +1751,8 @@ int main(int argc, char * argv[])
 
                if (help_tetro_move_collides(&tetro_active, &play_field, 0, -1))
                {
-                  // Drop collision
-                  help_tetro_plot(&tetro_active, &play_field);
-                  // Respawn a new tetro
-                  next_game_state = GAME_STATE_RESPAWN;
+                  // Drop collision - Place the tetro
+                  next_game_state = GAME_STATE_PLACE;
                }
                else
                {
@@ -1716,11 +1796,8 @@ int main(int argc, char * argv[])
                   // Place tetro if collision occurse
                   if (help_tetro_move_collides(&tetro_active, &play_field, 0, -1))
                   {
-                     // Drop collision
-                     help_tetro_plot(&tetro_active, &play_field);
-
-                     // Respawn a new tetro
-                     next_game_state = GAME_STATE_RESPAWN;
+                     // Drop collision - Place the tetro
+                     next_game_state = GAME_STATE_PLACE;
                   }
                   else
                   {
@@ -1736,10 +1813,42 @@ int main(int argc, char * argv[])
          else if (GAME_STATE_PLACE == game_state)
          {
             // Action - Place
+            help_tetro_plot(&tetro_active, &play_field, &plot_row_min, &plot_row_max);
+
+            // Line deletion required ?
+            const struct list_of_rows_s LIST_OF_FULL_ROWS = help_play_field_list_of_full_rows(&play_field);
+            if (0 == LIST_OF_FULL_ROWS.count)
+            {
+               // No rows to delete - Spawn new tetro and take it from there
+               next_game_state = GAME_STATE_RESPAWN;
+            }
+            else
+            {
+               // There are rows to delete
+               printf("\n\nRows to delete: (%d)", LIST_OF_FULL_ROWS.count);
+               for (int i = 0; i < LIST_OF_FULL_ROWS.count; ++i)
+               {
+                  printf("\n\t%-3d", LIST_OF_FULL_ROWS.list[i]);
+               }
+
+               // Check for line deletion + start flash timer
+               next_game_state = GAME_STATE_REMOVE_LINES;
+               time_last_removal_flash_timer = help_sdl_time_in_seconds();
+            }
+            /*
+               ???
+               for (r in list of full rows)
+               {
+                  flash on these for some time
+                  clear those after some time
+                  move them down after some time
+               }
+            */
          }
          else if (GAME_STATE_REMOVE_LINES == game_state)
          {
             // Action - Remove lines
+            //next_game_state = GAME_STATE_RESPAWN;
          }
          else if (GAME_STATE_RESPAWN == game_state)
          {
@@ -1777,9 +1886,7 @@ int main(int argc, char * argv[])
          }
       }
 
-      // Offline scene rendering
-      const color_rgba_t OFFLINE_CLEAR_COLOR = color_rgba_make_rgba(0, 0, 50, 0xFF);
-      help_texture_rgba_clear(tex_virtual, OFFLINE_CLEAR_COLOR);
+      // Render to scene - All game states
       // ----> Play field
       help_play_field_render_to_texture(&play_field, &engine);
       // ----> Active tetro
@@ -1796,6 +1903,39 @@ int main(int argc, char * argv[])
             y_wall * PLAY_FIELD_TILE_SIZE,
             SPRITE_MAP_TILE_BRICK
          );
+      }
+
+      // Additional rendering based on game state
+      if (GAME_STATE_REMOVE_LINES == game_state)
+      {
+         // Latch highlight rendering
+         const double TIME_DELTA_ROW_FLASH = 0.22;
+         static bool highlight_latch = true;
+         if (help_sdl_time_in_seconds() >= time_last_removal_flash_timer + TIME_DELTA_ROW_FLASH)
+         {
+            // Latch
+            highlight_latch = !highlight_latch;
+
+            // Update timer
+            time_last_removal_flash_timer = help_sdl_time_in_seconds();
+         }
+
+         // Highlight rows on timer
+         if (highlight_latch)
+         {
+            for (int deletion_row = plot_row_min; deletion_row <= plot_row_max; ++deletion_row)
+            {
+               for (int deletion_col = 0; deletion_col < PLAY_FIELD_WIDTH; ++deletion_col)
+               {
+                  help_render_engine_sprite(
+                     &engine,
+                     PLAY_FIELD_OFFSET_HORI_PIXELS + (deletion_col * PLAY_FIELD_TILE_SIZE),
+                     deletion_row * PLAY_FIELD_TILE_SIZE,
+                     SPRITE_MAP_TILE_HIGHLIGHT
+                  );
+               }
+            }
+         }
       }
 
       // TODO-GS: Timed rendering when VSync off ?

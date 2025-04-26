@@ -55,6 +55,7 @@ Simple building for windows
 - input lag and multiple fires
 - adding source files, libraries, and linking to existing build process
 - disable terminal running on release build
+- timed rendering i.e. adding to batch for a certain time
 
 # Things to learn
 - fynamic multi-dimensional arrays in C
