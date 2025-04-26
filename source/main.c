@@ -9,7 +9,7 @@
 
 // Constants
 const char * ARG_KEY_DIR_ABS_RES = "-abs_res_dir";
-const bool CONFIG_DO_RENDER_COLLISION_MASKS = false;
+const bool CONFIG_DO_RENDER_TETRO_COLLISION_MASKS = true;
 const bool CONFIG_DO_SET_RANDOM_SEED = true;
 
 // Helpers - Arguments
@@ -567,17 +567,17 @@ struct tetro_s help_tetro_make_type_I(void)
    );
    help_tetro_plot_left(
       &tetro_I,
-      "###."
-      "####"
-      "..##"
-      "..##"
+      "##.."
+      "##.#"
+      "...#"
+      "...#"
    );
    help_tetro_plot_right(
       &tetro_I,
-      "..##"
-      "..##"
-      "####"
-      "###."
+      "...#"
+      "...#"
+      "##.#"
+      "##.."
    );
 
    return tetro_I;
@@ -792,7 +792,6 @@ bool help_tetro_world_rotate_cw(struct tetro_world_s * tetro)
 
 struct tetro_world_s help_tetro_world_make_type_at_tile(enum tetro_type_e type, int tile_x, int tile_y)
 {
-   // TODO-GS: Spawning of tetros at position
    switch (type)
    {
       case TETRO_TYPE_I:
@@ -1166,6 +1165,16 @@ struct play_field_s {
    int offset_in_tiles_hori;
 };
 
+int help_play_field_get_hori_offset_in_tiles(struct play_field_s * play_field)
+{
+   return play_field ? play_field->offset_in_tiles_hori : 0;
+}
+
+int help_play_field_get_hori_offset_in_pixels(struct play_field_s * play_field)
+{
+   return play_field ? (play_field->offset_in_tiles_hori * PLAY_FIELD_TILE_SIZE) : 0;
+}
+
 struct play_field_cell_s help_play_field_cell_make(enum tetro_type_e type, bool occupied)
 {
    struct play_field_cell_s cell;
@@ -1235,6 +1244,122 @@ void help_play_field_render_to_texture(struct play_field_s * play_field, struct 
 
          // Cell occupied
          help_render_engine_sprite(engine, 0, 0, CELL->type);
+      }
+   }
+}
+
+// Helpers - Tetro spawning
+struct tetro_world_s help_tetro_world_make_random_at_spawn(void)
+{
+   const enum tetro_type_e RANDOM_TETRO_TYPE = rand() % TETRO_TYPE_COUNT;
+
+   // Make tetro at some position
+   struct tetro_world_s random_tetro = help_tetro_world_make_type_at_tile(RANDOM_TETRO_TYPE, 0, 0);
+
+   // TODO-GS: Random tetro rotation ?
+   for (int rotation = 0; rotation < rand() % 8; ++rotation)
+   {
+      help_tetro_world_rotate_cw(&random_tetro);
+   }
+
+   // Position to spawn based on tetro size
+   const int TETRO_SIZE = random_tetro.data.size;
+   random_tetro.tile_pos.x = ((PLAY_FIELD_WIDTH - 1) / 2) - (TETRO_SIZE / 2) + 1;
+   random_tetro.tile_pos.y = (PLAY_FIELD_HEIGHT - 1) - (TETRO_SIZE - 1);
+
+   // Success
+   return random_tetro;
+}
+
+// Helpers - Rendering stuff
+enum sprite_map_tile_e help_tetro_type_to_sprite_tile(enum tetro_type_e tetro_type)
+{
+   switch(tetro_type)
+   {
+      case TETRO_TYPE_I:
+         return SPRITE_MAP_TILE_TETRO_BLOCK_I;
+         break;
+      case TETRO_TYPE_O:
+         return SPRITE_MAP_TILE_TETRO_BLOCK_O;
+         break;
+      case TETRO_TYPE_L:
+         return SPRITE_MAP_TILE_TETRO_BLOCK_L;
+         break;
+      case TETRO_TYPE_Lr:
+         return SPRITE_MAP_TILE_TETRO_BLOCK_Lr;
+         break;
+      case TETRO_TYPE_S:
+         return SPRITE_MAP_TILE_TETRO_BLOCK_S;
+         break;
+      case TETRO_TYPE_Z:
+         return SPRITE_MAP_TILE_TETRO_BLOCK_Z;
+         break;
+      case TETRO_TYPE_T:
+         return SPRITE_MAP_TILE_TETRO_BLOCK_T;
+         break;
+      default:
+         return SPRITE_MAP_TILE_NA;
+         break;
+   }
+}
+
+void help_tetro_render_to_texture(struct tetro_world_s * tetro, int play_field_offset_hori, struct engine_s * engine)
+{
+   if (NULL == tetro || NULL == engine) return;
+
+   // Render tetro at position with play field offset
+   for (int ty = 0; ty < tetro->data.size; ++ty)
+   {
+      for (int tx = 0; tx < tetro->data.size; ++tx)
+      {
+         // Design cells
+         const bool IS_DESIGN_CELL = tetro->data.design[tx][ty];
+         if (IS_DESIGN_CELL)
+         {
+            help_render_engine_sprite(
+               engine,
+               play_field_offset_hori + (tetro->tile_pos.x * PLAY_FIELD_TILE_SIZE) + (tx * PLAY_FIELD_TILE_SIZE),
+               (tetro->tile_pos.y * PLAY_FIELD_TILE_SIZE) + (ty * PLAY_FIELD_TILE_SIZE),
+               help_tetro_type_to_sprite_tile(tetro->data.type)
+            );
+         }
+
+         // Tetro debug rendering configured ?
+         if (false == CONFIG_DO_RENDER_TETRO_COLLISION_MASKS)
+         {
+            continue;
+         }
+
+         // CCW collision mask
+         const bool IS_CCW_COLLISION_CELL = tetro->data.left[tx][ty];
+         if (IS_CCW_COLLISION_CELL)
+         {
+            // Render CCW cells a full-sized tile
+            help_texture_rgba_plot_aabb_outline(
+               help_engine_get_tex_virtual(engine),
+               play_field_offset_hori + (tetro->tile_pos.x * PLAY_FIELD_TILE_SIZE) + (tx * PLAY_FIELD_TILE_SIZE),
+               (tetro->tile_pos.y * PLAY_FIELD_TILE_SIZE) + (ty * PLAY_FIELD_TILE_SIZE),
+               PLAY_FIELD_TILE_SIZE,
+               PLAY_FIELD_TILE_SIZE,
+               color_rgba_make_rgba(150, 0, 0, 255)
+            );
+         }
+
+         // CW collision mask
+         const bool IS_CW_COLLISION_CELL = tetro->data.right[tx][ty];
+         if (IS_CW_COLLISION_CELL)
+         {
+            // Render CW cells a less than tile-size tile
+            const int INSET = 2;
+            help_texture_rgba_plot_aabb_outline(
+               help_engine_get_tex_virtual(engine),
+               play_field_offset_hori + (tetro->tile_pos.x * PLAY_FIELD_TILE_SIZE) + (tx * PLAY_FIELD_TILE_SIZE) + INSET,
+               (tetro->tile_pos.y * PLAY_FIELD_TILE_SIZE) + (ty * PLAY_FIELD_TILE_SIZE) + INSET,
+               PLAY_FIELD_TILE_SIZE - (2 * INSET),
+               PLAY_FIELD_TILE_SIZE - (2 * INSET),
+               color_rgba_make_rgba(0, 150, 0, 255)
+            );
+         }
       }
    }
 }
@@ -1388,6 +1513,8 @@ int main(int argc, char * argv[])
    enum game_state_e next_game_state = GAME_STATE_NONE;
    // ----> Playing field
    struct play_field_s play_field = help_play_field_make_non_occupied(1);
+   // ----> Active tetro
+   struct tetro_world_s tetro_active = help_tetro_world_make_random_at_spawn();
 
    // Game loop
    bool tetris_close_requested = false;
@@ -1462,6 +1589,8 @@ int main(int argc, char * argv[])
       help_texture_rgba_clear(tex_virtual, OFFLINE_CLEAR_COLOR);
       // ----> Play field
       help_play_field_render_to_texture(&play_field, &engine);
+      // ----> Active tetro
+      help_tetro_render_to_texture(&tetro_active, help_play_field_get_hori_offset_in_tiles(&play_field), &engine);
 
       // TODO-GS: Timed rendering when VSync off ?
       // Copy offline to online texture

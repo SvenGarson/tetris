@@ -1932,33 +1932,6 @@ int main(int argc, char * argv[])
       // -> Clear
       help_texture_rgba_clear(tex_virtual, color_rgba_make_rgba(50, 50, 50, 255));
       // -> Render scene
-      // ----> Playing field with horizontal offset
-      for (int fy = 0; fy < FIELD_HEIGHT; ++fy)
-      {
-         for (int fx = 0; fx < FIELD_WIDTH; ++fx)
-         {
-            // Background
-            help_texture_rgba_plot_aabb(
-               tex_virtual,
-               (FIELD_OFFSET_HORI_IN_TILES + fx) * FIELD_TILE_SIZE,
-               fy * FIELD_TILE_SIZE,
-               FIELD_TILE_SIZE,
-               FIELD_TILE_SIZE,
-               color_rgba_make_rgba(125, 125, 125, 255)
-            );
-
-            // Placed cells
-            const struct field_cell_s * FIELD_CELL = &field[fx][fy];
-            if (false == FIELD_CELL->occupied)
-            {
-               continue;
-            }
-
-            // Field occupied
-            const struct sprite_s TETRO_CELL_SPRITE = tetro_type_to_sprite[FIELD_CELL->type];
-            help_tex_sprite_render(TETRO_CELL_SPRITE, (FIELD_OFFSET_HORI_IN_TILES + fx) * FIELD_TILE_SIZE, fy * FIELD_TILE_SIZE, tex_sprites, tex_virtual);
-         }
-      }
       // ----> Active tetro with horizontal field offset
       for (int ty = 0; ty < tetro_active.data.size; ++ty)
       {
