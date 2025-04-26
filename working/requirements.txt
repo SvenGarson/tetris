@@ -1,3 +1,10 @@
+# Line deletion
+> Cycles
+   - movement
+   - place
+   - line removal
+   - spaw
+
 # Next Task
 - line deletion
 - timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
@@ -45,3 +52,6 @@ Simple building for windows
 # Things to improve
 - adding source files, libraries, and linking to existing build process
 - disable terminal running on release build
+
+# Things to learn
+- fynamic multi-dimensional arrays in C
