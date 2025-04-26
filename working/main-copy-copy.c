@@ -1932,57 +1932,6 @@ int main(int argc, char * argv[])
       // -> Clear
       help_texture_rgba_clear(tex_virtual, color_rgba_make_rgba(50, 50, 50, 255));
       // -> Render scene
-      // ----> Active tetro with horizontal field offset
-      for (int ty = 0; ty < tetro_active.data.size; ++ty)
-      {
-         for (int tx = 0; tx < tetro_active.data.size; ++tx)
-         {
-            // Design cells
-            if (tetro_active.data.design[tx][ty])
-            {
-               const struct sprite_s TETRO_CELL_SPRITE = tetro_type_to_sprite[tetro_active.data.type];
-               help_tex_sprite_render(
-                  TETRO_CELL_SPRITE,
-                  (tetro_active.tile_pos.x + FIELD_OFFSET_HORI_IN_TILES + tx) * FIELD_TILE_SIZE,
-                  (tetro_active.tile_pos.y + ty) * FIELD_TILE_SIZE,
-                  tex_sprites,
-                  tex_virtual
-               );
-            }
-
-            // Render collision shapes for debuggin ?
-            if (false == CONFIG_DO_RENDER_COLLISION_MASKS)
-            {
-               continue;
-            }
-
-            // CCW collision mask
-            if (tetro_active.data.left[tx][ty])
-            {
-               help_texture_rgba_plot_aabb_outline(
-                  tex_virtual,
-                  (tetro_active.tile_pos.x + FIELD_OFFSET_HORI_IN_TILES + tx) * FIELD_TILE_SIZE,
-                  (tetro_active.tile_pos.y + ty) * FIELD_TILE_SIZE,
-                  FIELD_TILE_SIZE,
-                  FIELD_TILE_SIZE,
-                  color_rgba_make_rgba(150, 0, 0, 255)
-               );
-            }
-
-            // CW collision mask
-            if (tetro_active.data.right[tx][ty])
-            {
-               help_texture_rgba_plot_aabb_outline(
-                  tex_virtual,
-                  (tetro_active.tile_pos.x + FIELD_OFFSET_HORI_IN_TILES + tx) * FIELD_TILE_SIZE + 1,
-                  (tetro_active.tile_pos.y + ty) * FIELD_TILE_SIZE + 1,
-                  FIELD_TILE_SIZE - 2,
-                  FIELD_TILE_SIZE - 2,
-                  color_rgba_make_rgba(0, 150, 0, 255)
-               );
-            }
-         }
-      }
       // ----> Game stats
       static float score = 0;
       score += 0.75f;
@@ -2010,26 +1959,6 @@ int main(int argc, char * argv[])
 
       // ----> Next tetro preview
       help_border_render(sprite_map, 13, 0, 6, 6, tex_sprites, tex_virtual);
-
-      // ----> Field bricks
-      for (int field_brick_y = 0; field_brick_y < VIRTUAL_SIZE.y / FIELD_TILE_SIZE; ++field_brick_y)
-      {
-         help_tex_sprite_render(
-            help_sprite_map_sprite_for(sprite_map, SPRITE_MAP_TILE_BRICK),
-            (FIELD_OFFSET_HORI_IN_TILES - 1) * FIELD_TILE_SIZE,
-            field_brick_y * FIELD_TILE_SIZE,
-            tex_sprites,
-            tex_virtual
-         );
-
-         help_tex_sprite_render(
-            help_sprite_map_sprite_for(sprite_map, SPRITE_MAP_TILE_BRICK),
-            (FIELD_OFFSET_HORI_IN_TILES + FIELD_WIDTH) * FIELD_TILE_SIZE,
-            field_brick_y * FIELD_TILE_SIZE,
-            tex_sprites,
-            tex_virtual
-         );
-      }
 
       // Copy offline to online texture
       const bool SUCCESS_UPDATE_TEXTURE = SDL_UpdateTexture(

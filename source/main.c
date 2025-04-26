@@ -1023,6 +1023,7 @@ enum sprite_map_tile_e {
    SPRITE_MAP_TILE_TETRO_BLOCK_S,
    SPRITE_MAP_TILE_TETRO_BLOCK_T,
    SPRITE_MAP_TILE_TETRO_BLOCK_Z,
+   SPRITE_MAP_TILE_BRICK,
    SPRITE_MAP_TILE_NA,
    SPRITE_MAP_TILE_COUNT
 };
@@ -1501,6 +1502,8 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_T, 5, 6);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_Z, 6, 6);
 
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BRICK, 0, 4);
+
    // Package engine components
    struct engine_s engine;
    engine.tex_virtual = tex_virtual;
@@ -1591,6 +1594,20 @@ int main(int argc, char * argv[])
       help_play_field_render_to_texture(&play_field, &engine);
       // ----> Active tetro
       help_tetro_render_to_texture(&tetro_active, help_play_field_get_hori_offset_in_tiles(&play_field), &engine);
+      // ----> Play field walls
+      const int PLAY_FIELD_OFFSET_HORI = help_play_field_get_hori_offset_in_pixels(&play_field);
+      for (int y_wall = 0; y_wall < PLAY_FIELD_HEIGHT; ++y_wall)
+      {
+         // Left wall
+         help_render_engine_sprite(&engine, 0, y_wall * PLAY_FIELD_TILE_SIZE, SPRITE_MAP_TILE_BRICK);
+         // Right wall
+         help_render_engine_sprite(
+            &engine,
+            (PLAY_FIELD_WIDTH * PLAY_FIELD_TILE_SIZE) + PLAY_FIELD_OFFSET_HORI,
+            y_wall * PLAY_FIELD_TILE_SIZE,
+            SPRITE_MAP_TILE_BRICK
+         );
+      }
 
       // TODO-GS: Timed rendering when VSync off ?
       // Copy offline to online texture
