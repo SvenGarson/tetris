@@ -6,6 +6,7 @@
    - spaw
 
 # Next Task
+- game over text
 - line deletion
 - timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
 - test rotation masks, placing, collision etc.
@@ -51,6 +52,7 @@ Simple building for windows
    - https://lazyfoo.net/tutorials/SDL3/12-frame-rate-and-vsync/index.php
 
 # Things to improve
+- input lag and multiple fires
 - adding source files, libraries, and linking to existing build process
 - disable terminal running on release build
 
