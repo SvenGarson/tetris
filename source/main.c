@@ -1059,6 +1059,15 @@ struct sprite_map_s * help_sprite_map_create(struct texture_rgba_s * texture, in
    return instance;
 }
 
+struct sprite_s help_sprite_map_sprite_for(const struct sprite_map_s * instance, enum sprite_map_tile_e tile)
+{
+   // TODO-GS: This sucks
+   if (NULL == instance) return sprite_make(13, 13, 8);
+
+   // Assume that all tiles are mapped for now
+   return instance->tile_to_sprite[tile];
+}
+
 // Helpers - Regions
 struct region_2d_s {
    struct vec_2i_s min;
@@ -1103,12 +1112,52 @@ bool help_bounds_out_of_region(int min_x, int min_y, int width, int height, int 
    ) ? true : false;
 }
 
+// Helpers - Engine
+struct engine_s {
+   // Components
+
+   // Resources
+   struct texture_rgba_s * tex_virtual;
+   struct texture_rgba_s * tex_sprites;
+   struct sprite_map_s * sprite_map;
+};
+
+struct texture_rgba_s * help_engine_get_tex_virtual(struct engine_s * engine)
+{
+   return engine ? engine->tex_virtual : NULL;
+}
+
+struct texture_rgba_s * help_engine_get_tex_sprites(struct engine_s * engine)
+{
+   return engine ? engine->tex_sprites : NULL;
+}
+
+struct sprite_map_s * help_engine_get_sprite_map(struct engine_s * engine)
+{
+   return engine ? engine->sprite_map : NULL;
+}
+
 // Helpers - Playing field
 struct play_field_cell_s {
    enum tetro_type_e type;
    bool occupied;
 };
 
+// Helpers - Rendering (Simplified)
+bool help_render_engine_sprite(struct engine_s * engine, int x, int y, enum sprite_map_tile_e tile_type)
+{
+   if (NULL == engine) return false;
+
+   return help_tex_sprite_render(
+      help_sprite_map_sprite_for(help_engine_get_sprite_map(engine), tile_type),
+      x,
+      y,
+      help_engine_get_tex_sprites(engine),
+      help_engine_get_tex_virtual(engine)
+   );
+}
+
+// Helpers - Play field
 #define PLAY_FIELD_TILE_SIZE (8)
 #define PLAY_FIELD_WIDTH (10)
 #define PLAY_FIELD_HEIGHT (18)
@@ -1157,23 +1206,18 @@ bool help_play_field_coords_out_of_bounds(struct play_field_s * play_field, int 
    return help_bounds_out_of_region(0, 0, PLAY_FIELD_WIDTH, PLAY_FIELD_HEIGHT, x, y);
 }
 
-bool help_play_field_render_to_texture(struct play_field_s * play_field, struct texture_rgba_s * tex_target)
+void help_play_field_render_to_texture(struct play_field_s * play_field, struct engine_s * engine)
 {
-   if (NULL == play_field || NULL == tex_target)
-   {
-      return false;
-   }
+   if (NULL == play_field || NULL == engine) return;
 
    // Render with play field offset
    for (int y = 0; y < PLAY_FIELD_HEIGHT; ++y)
    {
       for (int x = 0; x < PLAY_FIELD_WIDTH; ++x)
       {
-         const struct play_field_cell_s * CELL = &play_field->cells[x][y];
-
          // Render background
          help_texture_rgba_plot_aabb(
-            tex_target,
+            help_engine_get_tex_virtual(engine),
             (play_field->offset_in_tiles_hori * PLAY_FIELD_TILE_SIZE) + (x * PLAY_FIELD_TILE_SIZE),
             y * PLAY_FIELD_TILE_SIZE,
             PLAY_FIELD_TILE_SIZE,
@@ -1182,7 +1226,15 @@ bool help_play_field_render_to_texture(struct play_field_s * play_field, struct 
          );
 
          // Render placed cell by type
-         // ??? render sprite (x, y, map, type, target)
+         const struct play_field_cell_s * CELL = &play_field->cells[x][y];
+         if (false == CELL->occupied)
+         {
+            // Don't render non-occupied cells
+            continue;
+         }
+
+         // Cell occupied
+         help_render_engine_sprite(engine, 0, 0, CELL->type);
       }
    }
 }
@@ -1325,7 +1377,10 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_Z, 6, 6);
 
    // Package engine components
-   
+   struct engine_s engine;
+   engine.tex_virtual = tex_virtual;
+   engine.tex_sprites = tex_sprites;
+   engine.sprite_map = sprite_map;
 
    // Game state
    // ----> Tick state
@@ -1406,7 +1461,7 @@ int main(int argc, char * argv[])
       const color_rgba_t OFFLINE_CLEAR_COLOR = color_rgba_make_rgba(0, 0, 50, 0xFF);
       help_texture_rgba_clear(tex_virtual, OFFLINE_CLEAR_COLOR);
       // ----> Play field
-      help_play_field_render_to_texture(&play_field, tex_virtual);
+      help_play_field_render_to_texture(&play_field, &engine);
 
       // TODO-GS: Timed rendering when VSync off ?
       // Copy offline to online texture

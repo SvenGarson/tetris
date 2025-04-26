@@ -10,6 +10,7 @@
 - timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
 - test rotation masks, placing, collision etc.
 - render I tetro correctly based on rotation
+- package up all of the engine and resources
 
 # Goal
 Fully playable version of Tetris
