@@ -1096,6 +1096,7 @@ enum game_state_e {
    GAME_STATE_CONTROL,
    GAME_STATE_PLACE,
    GAME_STATE_REMOVE_LINES,
+   GAME_STATE_CONSOLIDATE_PLAY_FIELD,
    GAME_STATE_RESPAWN,
    GAME_STATE_GAME_OVER,
    GAME_STATE_NONE
@@ -1205,6 +1206,24 @@ bool help_play_field_coords_out_of_bounds(struct play_field_s * play_field, int 
    if (NULL == play_field) return true;
 
    return help_bounds_out_of_region(0, 0, PLAY_FIELD_WIDTH, PLAY_FIELD_HEIGHT, x, y);
+}
+
+bool help_play_field_set_cell(struct play_field_s * play_field, int x, int y, struct play_field_cell_s new_cell)
+{
+   if (help_play_field_coords_out_of_bounds(play_field, x, y)) return false;
+
+   play_field->cells[x][y] = new_cell;
+
+   return true;
+}
+
+bool help_play_field_consolidate(struct play_field_s * play_field)
+{
+   if (NULL == play_field) return false;
+
+   printf("\nConsolidate ...");
+
+   return true;
 }
 
 enum sprite_map_tile_e help_tetro_type_to_sprite_tile(enum tetro_type_e tetro_type)
@@ -1685,6 +1704,11 @@ int main(int argc, char * argv[])
    double time_last_tetro_player_move = help_sdl_time_in_seconds();
    double time_last_tetro_player_drop = help_sdl_time_in_seconds();
    double time_last_removal_flash_timer = help_sdl_time_in_seconds();
+   double time_last_row_deletion_timer = help_sdl_time_in_seconds();
+   // ----> Shared game state data points
+   // Shared game state transition data points
+   int plot_row_min, plot_row_max;
+   struct list_of_rows_s list_of_full_rows;
    // Game loop
    bool tetris_close_requested = false;
    while (false == tetris_close_requested)
@@ -1698,9 +1722,6 @@ int main(int argc, char * argv[])
             tetris_close_requested = true;
          }
       }
-
-      // Shared game state transition data points
-      int plot_row_min, plot_row_max;
 
       // Tick
       const double NEW_TIME = help_sdl_time_in_seconds();
@@ -1816,8 +1837,8 @@ int main(int argc, char * argv[])
             help_tetro_plot(&tetro_active, &play_field, &plot_row_min, &plot_row_max);
 
             // Line deletion required ?
-            const struct list_of_rows_s LIST_OF_FULL_ROWS = help_play_field_list_of_full_rows(&play_field);
-            if (0 == LIST_OF_FULL_ROWS.count)
+            list_of_full_rows = help_play_field_list_of_full_rows(&play_field);
+            if (0 == list_of_full_rows.count)
             {
                // No rows to delete - Spawn new tetro and take it from there
                next_game_state = GAME_STATE_RESPAWN;
@@ -1825,30 +1846,38 @@ int main(int argc, char * argv[])
             else
             {
                // There are rows to delete
-               printf("\n\nRows to delete: (%d)", LIST_OF_FULL_ROWS.count);
-               for (int i = 0; i < LIST_OF_FULL_ROWS.count; ++i)
-               {
-                  printf("\n\t%-3d", LIST_OF_FULL_ROWS.list[i]);
-               }
-
-               // Check for line deletion + start flash timer
+               // Start deletion timers
                next_game_state = GAME_STATE_REMOVE_LINES;
                time_last_removal_flash_timer = help_sdl_time_in_seconds();
+               time_last_row_deletion_timer = help_sdl_time_in_seconds();
             }
-            /*
-               ???
-               for (r in list of full rows)
-               {
-                  flash on these for some time
-                  clear those after some time
-                  move them down after some time
-               }
-            */
          }
          else if (GAME_STATE_REMOVE_LINES == game_state)
          {
             // Action - Remove lines
-            //next_game_state = GAME_STATE_RESPAWN;
+            const double TIME_DELTA_ROW_DELETION = 2.0;
+            if (help_sdl_time_in_seconds() >= time_last_row_deletion_timer + TIME_DELTA_ROW_DELETION)
+            {
+               // Time to delete rows
+               for (int row = 0; row < list_of_full_rows.count; ++row)
+               {
+                  for (int col = 0; col < PLAY_FIELD_WIDTH; ++col)
+                  {
+                     help_play_field_set_cell(&play_field, col, row, help_play_field_cell_make_non_occupied());
+                  }
+               }
+
+               // Consolidate play field
+               next_game_state = GAME_STATE_CONSOLIDATE_PLAY_FIELD;
+            }
+         }
+         else if (GAME_STATE_CONSOLIDATE_PLAY_FIELD == game_state)
+         {
+            // Action - Consolidate play field after full row deletion
+            help_play_field_consolidate(&play_field);
+
+            // Back to gameplay
+            next_game_state = GAME_STATE_RESPAWN;
          }
          else if (GAME_STATE_RESPAWN == game_state)
          {
@@ -1909,6 +1938,7 @@ int main(int argc, char * argv[])
       if (GAME_STATE_REMOVE_LINES == game_state)
       {
          // Latch highlight rendering
+         // TODO-GS: Flash only the full rows !
          const double TIME_DELTA_ROW_FLASH = 0.22;
          static bool highlight_latch = true;
          if (help_sdl_time_in_seconds() >= time_last_removal_flash_timer + TIME_DELTA_ROW_FLASH)
