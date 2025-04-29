@@ -504,7 +504,7 @@ struct tetro_s help_tetro_make_typed_unfinished(enum tetro_type_e type, int size
    return tetro;
 }
 
-bool help_tetro_plot_mask(tetro_mask mask, int size, const char * pattern)
+bool help_tetro_drop_mask(tetro_mask mask, int size, const char * pattern)
 {
    if (NULL == mask || NULL == pattern) return false;
 
@@ -534,45 +534,45 @@ bool help_tetro_plot_mask(tetro_mask mask, int size, const char * pattern)
    return true;
 }
 
-bool help_tetro_plot_design(struct tetro_s * out_tetro, const char * pattern)
+bool help_tetro_drop_design(struct tetro_s * out_tetro, const char * pattern)
 {
    if (NULL == out_tetro || NULL == pattern) return false;
 
-   return help_tetro_plot_mask(out_tetro->design, out_tetro->size, pattern);
+   return help_tetro_drop_mask(out_tetro->design, out_tetro->size, pattern);
 }
 
-bool help_tetro_plot_left(struct tetro_s * out_tetro, const char * pattern)
+bool help_tetro_drop_left(struct tetro_s * out_tetro, const char * pattern)
 {
    if (NULL == out_tetro || NULL == pattern) return false;
 
-   return help_tetro_plot_mask(out_tetro->left, out_tetro->size, pattern);
+   return help_tetro_drop_mask(out_tetro->left, out_tetro->size, pattern);
 }
 
-bool help_tetro_plot_right(struct tetro_s * out_tetro, const char * pattern)
+bool help_tetro_drop_right(struct tetro_s * out_tetro, const char * pattern)
 {
    if (NULL == out_tetro || NULL == pattern) return false;
 
-   return help_tetro_plot_mask(out_tetro->right, out_tetro->size, pattern);
+   return help_tetro_drop_mask(out_tetro->right, out_tetro->size, pattern);
 }
 
 struct tetro_s help_tetro_make_type_I(void)
 {
    struct tetro_s tetro_I = help_tetro_make_typed_unfinished(TETRO_TYPE_I, 4);
-   help_tetro_plot_design(
+   help_tetro_drop_design(
       &tetro_I,
       "..#."
       "..#."
       "..#."
       "..#."
    );
-   help_tetro_plot_left(
+   help_tetro_drop_left(
       &tetro_I,
       "##.."
       "##.#"
       "...#"
       "...#"
    );
-   help_tetro_plot_right(
+   help_tetro_drop_right(
       &tetro_I,
       "...#"
       "...#"
@@ -586,17 +586,17 @@ struct tetro_s help_tetro_make_type_I(void)
 struct tetro_s help_tetro_make_type_O(void)
 {
    struct tetro_s tetro_O = help_tetro_make_typed_unfinished(TETRO_TYPE_O, 2);
-   help_tetro_plot_design(
+   help_tetro_drop_design(
       &tetro_O,
       "##"
       "##"
    );
-   help_tetro_plot_left(
+   help_tetro_drop_left(
       &tetro_O,
       ".."
       ".."
    );
-   help_tetro_plot_right(
+   help_tetro_drop_right(
       &tetro_O,
       ".."
       ".."
@@ -608,19 +608,19 @@ struct tetro_s help_tetro_make_type_O(void)
 struct tetro_s help_tetro_make_type_Lr(void)
 {
    struct tetro_s tetro_Lr = help_tetro_make_typed_unfinished(TETRO_TYPE_Lr, 3);
-   help_tetro_plot_design(
+   help_tetro_drop_design(
       &tetro_Lr,
       ".#."
       ".#."
       "##."
    );
-   help_tetro_plot_left(
+   help_tetro_drop_left(
       &tetro_Lr,
       "#.."
       "#.#"
       "..#"
    );
-   help_tetro_plot_right(
+   help_tetro_drop_right(
       &tetro_Lr,
       "#.#"
       "#.#"
@@ -633,19 +633,19 @@ struct tetro_s help_tetro_make_type_Lr(void)
 struct tetro_s help_tetro_make_type_L(void)
 {
    struct tetro_s tetro_L = help_tetro_make_typed_unfinished(TETRO_TYPE_L, 3);
-   help_tetro_plot_design(
+   help_tetro_drop_design(
       &tetro_L,
       ".#."
       ".#."
       ".##"
    );
-   help_tetro_plot_left(
+   help_tetro_drop_left(
       &tetro_L,
       "#.#"
       "#.#"
       "..."
    );
-   help_tetro_plot_right(
+   help_tetro_drop_right(
       &tetro_L,
       "..#"
       "#.#"
@@ -658,19 +658,19 @@ struct tetro_s help_tetro_make_type_L(void)
 struct tetro_s help_tetro_make_type_S(void)
 {
    struct tetro_s tetro_S = help_tetro_make_typed_unfinished(TETRO_TYPE_S, 3);
-   help_tetro_plot_design(
+   help_tetro_drop_design(
       &tetro_S,
       "..."
       ".##"
       "##."
    );
-   help_tetro_plot_left(
+   help_tetro_drop_left(
       &tetro_S,
       ".##"
       "..."
       "..#"
    );
-   help_tetro_plot_right(
+   help_tetro_drop_right(
       &tetro_S,
       "#.."
       "#.."
@@ -683,19 +683,19 @@ struct tetro_s help_tetro_make_type_S(void)
 struct tetro_s help_tetro_make_type_Z(void)
 {
    struct tetro_s tetro_Z = help_tetro_make_typed_unfinished(TETRO_TYPE_Z, 3);
-   help_tetro_plot_design(
+   help_tetro_drop_design(
       &tetro_Z,
       "..."
       "##."
       ".##"
    );
-   help_tetro_plot_left(
+   help_tetro_drop_left(
       &tetro_Z,
       "..#"
       "..#"
       "#.."
    );
-   help_tetro_plot_right(
+   help_tetro_drop_right(
       &tetro_Z,
       "##."
       "..."
@@ -708,19 +708,19 @@ struct tetro_s help_tetro_make_type_Z(void)
 struct tetro_s help_tetro_make_type_T(void)
 {
    struct tetro_s tetro_T = help_tetro_make_typed_unfinished(TETRO_TYPE_T, 3);
-   help_tetro_plot_design(
+   help_tetro_drop_design(
       &tetro_T,
       "..."
       "###"
       ".#."
    );
-   help_tetro_plot_left(
+   help_tetro_drop_left(
       &tetro_T,
       ".##"
       "..."
       "#.#"
    );
-   help_tetro_plot_right(
+   help_tetro_drop_right(
       &tetro_T,
       "##."
       "..."
@@ -1217,6 +1217,23 @@ bool help_play_field_set_cell(struct play_field_s * play_field, int x, int y, st
    return true;
 }
 
+bool help_play_field_clear_row(struct play_field_s * play_field, int row)
+{
+   if (NULL == play_field) return false;
+
+   bool row_cleared = true;
+   for (int col = 0; col < PLAY_FIELD_WIDTH; ++col)
+   {
+      const bool CELL_CLEARED = help_play_field_set_cell(play_field, col, row, help_play_field_cell_make_non_occupied());
+      if (false == CELL_CLEARED)
+      {
+         row_cleared = false;
+      }
+   }
+
+   return row_cleared;
+}
+
 bool help_play_field_consolidate(struct play_field_s * play_field)
 {
    if (NULL == play_field) return false;
@@ -1429,7 +1446,7 @@ bool help_tetro_move_collides(const struct tetro_world_s * TETRO, struct play_fi
 }
 
 
-bool help_tetro_plot(const struct tetro_world_s * TETRO, struct play_field_s * play_field, int * out_plot_row_min, int * out_plot_row_max)
+bool help_tetro_drop(const struct tetro_world_s * TETRO, struct play_field_s * play_field, int * out_plot_row_min, int * out_plot_row_max)
 {
    if (NULL == TETRO || NULL == play_field || NULL == out_plot_row_min || NULL == out_plot_row_max) return false;
 
@@ -1834,7 +1851,7 @@ int main(int argc, char * argv[])
          else if (GAME_STATE_PLACE == game_state)
          {
             // Action - Place
-            help_tetro_plot(&tetro_active, &play_field, &plot_row_min, &plot_row_max);
+            help_tetro_drop(&tetro_active, &play_field, &plot_row_min, &plot_row_max);
 
             // Line deletion required ?
             list_of_full_rows = help_play_field_list_of_full_rows(&play_field);
@@ -1863,7 +1880,12 @@ int main(int argc, char * argv[])
                {
                   for (int col = 0; col < PLAY_FIELD_WIDTH; ++col)
                   {
-                     help_play_field_set_cell(&play_field, col, row, help_play_field_cell_make_non_occupied());
+                     // Clear all rows that were detected full on tetro placement
+                     for (int i_del_row = 0; i_del_row < list_of_full_rows.count; ++i_del_row)
+                     {
+                        const int DELETION_ROW = list_of_full_rows.list[i_del_row];
+                        help_play_field_clear_row(&play_field, DELETION_ROW);
+                     }
                   }
                }
 
