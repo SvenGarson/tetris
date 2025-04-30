@@ -399,7 +399,15 @@ struct sprite_s sprite_make(int tile_x, int tile_y, int tile_size)
 }
 
 // Logic - Textured Sprite Rendering
-bool help_tex_sprite_render(struct sprite_s sprite, int x, int y, struct texture_rgba_s * texture_sprite, struct texture_rgba_s * texture_target)
+bool help_tex_sprite_render_tinted(
+   struct sprite_s sprite,
+   int x,
+   int y,
+   struct texture_rgba_s * texture_sprite,
+   struct texture_rgba_s * texture_target,
+   bool do_tint,
+   color_rgba_t tint_color
+)
 {
    if (NULL == texture_sprite || NULL == texture_target) return false;
 
@@ -425,11 +433,12 @@ bool help_tex_sprite_render(struct sprite_s sprite, int x, int y, struct texture
          }
 
          // Plot sprite source texture color into target texture
+         // Tint target texels here for now
          const bool SUCCESS_PLOTTING_TEXEL = help_texture_rgba_plot_texel(
             texture_target,
             x + spr_x,
             y + spr_y,
-            SAFE_SOURCE_TEXEL_COLOR
+            do_tint ? tint_color : SAFE_SOURCE_TEXEL_COLOR
          );
       }
    }
@@ -1119,12 +1128,29 @@ bool help_render_engine_sprite(struct engine_s * engine, int x, int y, enum spri
 {
    if (NULL == engine) return false;
 
-   return help_tex_sprite_render(
+   return help_tex_sprite_render_tinted(
       help_sprite_map_sprite_for(help_engine_get_sprite_map(engine), tile_type),
       x,
       y,
       help_engine_get_tex_sprites(engine),
-      help_engine_get_tex_virtual(engine)
+      help_engine_get_tex_virtual(engine),
+      false,
+      color_rgba_make_rgba(0, 0, 0, 0xFF)
+   );
+}
+
+bool help_render_engine_sprite_tinted(struct engine_s * engine, int x, int y, enum sprite_map_tile_e tile_type, bool do_tint, color_rgba_t tint)
+{
+   if (NULL == engine) return false;
+
+   return help_tex_sprite_render_tinted(
+      help_sprite_map_sprite_for(help_engine_get_sprite_map(engine), tile_type),
+      x,
+      y,
+      help_engine_get_tex_sprites(engine),
+      help_engine_get_tex_virtual(engine),
+      do_tint,
+      tint
    );
 }
 
@@ -1690,7 +1716,7 @@ bool help_font_render_char_mapped(struct font_render_s * instance, char characte
 }
 
 // Additional engine based rendering
-bool help_engine_render_text_at(struct engine_s * engine, const char * text, int tile_x, int tile_y)
+bool help_engine_render_tinted_text_at_tile_internal(struct engine_s * engine, const char * text, int tile_x, int tile_y, bool do_tint, color_rgba_t tint)
 {
    if (NULL == engine || NULL == text) return false;
 
@@ -1721,11 +1747,13 @@ bool help_engine_render_text_at(struct engine_s * engine, const char * text, int
       {
          // Renderable font character
          const int CHAR_ASCII = (int)TEXT_CHAR_UPPERCASED;
-         help_render_engine_sprite(
+         help_render_engine_sprite_tinted(
             engine,
             tile_cursor.x * PLAY_FIELD_TILE_SIZE,
             tile_cursor.y * PLAY_FIELD_TILE_SIZE,
-            engine->font_render->glyphs[CHAR_ASCII].sprite_tile
+            engine->font_render->glyphs[CHAR_ASCII].sprite_tile,
+            do_tint,
+            tint
          );
 
          tile_cursor.x += 1;
@@ -1749,6 +1777,16 @@ bool help_engine_render_text_at(struct engine_s * engine, const char * text, int
 
    // Success
    return true;
+}
+
+bool help_engine_render_text_at_tile(struct engine_s * engine, const char * text, int tile_x, int tile_y)
+{
+   return help_engine_render_tinted_text_at_tile_internal(engine, text, tile_x, tile_y, false, color_rgba_make_rgba(0xFF, 0, 0xFF, 0xFF));
+}
+
+bool help_engine_render_tinted_text_at_tile(struct engine_s * engine, const char * text, int tile_x, int tile_y, color_rgba_t tint)
+{
+   return help_engine_render_tinted_text_at_tile_internal(engine, text, tile_x, tile_y, true, tint);
 }
 
 // Logic - Main
@@ -2269,8 +2307,13 @@ int main(int argc, char * argv[])
       }
       if (GAME_STATE_GAME_OVER == game_state)
       {
-         help_engine_render_text_at(&engine, "Game\n\nOver", 4, PLAY_FIELD_HEIGHT - 4);
+         help_engine_render_text_at_tile(&engine, "Game\n\nOver", 4, PLAY_FIELD_HEIGHT - 4);
       }
+      help_engine_render_tinted_text_at_tile(&engine, "Red", 4, PLAY_FIELD_HEIGHT - 1, color_rgba_make_rgba(255, 0, 0, 255));
+      help_engine_render_tinted_text_at_tile(&engine, "Green", 4, PLAY_FIELD_HEIGHT - 2, color_rgba_make_rgba(0, 255, 0, 255));
+      help_engine_render_tinted_text_at_tile(&engine, "Blue", 4, PLAY_FIELD_HEIGHT - 3, color_rgba_make_rgba(0, 0, 255, 255));
+      help_engine_render_tinted_text_at_tile(&engine, "Black", 4, PLAY_FIELD_HEIGHT - 4, color_rgba_make_rgba(0, 0, 0, 255));
+      help_engine_render_tinted_text_at_tile(&engine, "White", 4, PLAY_FIELD_HEIGHT - 5, color_rgba_make_rgba(255, 255, 255, 255));
 
       // TODO-GS: Timed rendering when VSync off ?
       // Copy offline to online texture

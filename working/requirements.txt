@@ -1,6 +1,4 @@
 # Next Task
-- text tinting in engine
-- game over text
 - underlined text_ line and dotted
 - timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
 - test rotation masks, placing, collision etc.
@@ -46,6 +44,7 @@
 - disable terminal running on release build
 - timed rendering i.e. adding to batch for a certain time
 - config flag for debug output
+- batcher with settings to get through to the renderer, not tex functions (+ tinting)
 
 # Things to learn
 - fynamic multi-dimensional arrays in C
