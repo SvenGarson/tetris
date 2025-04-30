@@ -1,50 +1,37 @@
-# Next Task
-- underlined text_ line and dotted
-- timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
-- test rotation masks, placing, collision etc.
-- render I tetro correctly based on rotation
+# Current task
+- Fix input multi-firing
 
-# Testing
-- movement collision of all types
-- movement rotations of all types
-
-# Gameplay Notes
-> screens
-   - splash
-   - music type
-   - game
-   - death -> slash ?
-> GUI
-   - borders
-   - field
+# Next tasks
+- music and sound effects
+> simulate and render statistics on GUI
    - score
    - level
    - lines
    - next shape
-> tetro
-   - rotations
-   - blocking impossible rotations
-   - support all tetro types
-   - random type spawning in level based on seed
-   - render tetros properly
-   - movement left and right + input timing
-   - movement jolt down with + input timing
-   - full line break + flash + drop down
-> juice
-   - music
-   - sfx
+- add all required screens (splash, music type, game, game over, thx)
 
-# Feature features
-> limit framerate when VSYNC not supported or disabled
+# Bugs to fix
+- multi-firing of input
+- render I tetro properly
+- flicker rendering tetro on first spawn (rendering related)
+
+# Testing
+- movement and rotation collision against play field and borders
+
+# Improvement
+- DT-based frame rendering interpolation
+> limit framerate when VSync disabled
    - https://lazyfoo.net/tutorials/SDL3/12-frame-rate-and-vsync/index.php
+> debug VS release build
+   - process terminal
+   - logging
 
-# Things to improve
-- input lag and multiple fires
-- adding source files, libraries, and linking to existing build process
-- disable terminal running on release build
-- timed rendering i.e. adding to batch for a certain time
-- config flag for debug output
-- batcher with settings to get through to the renderer, not tex functions (+ tinting)
+# Gameplay Notes
+> GUI
+   - score
+   - level
+   - lines
+   - next shape
 
 # Things to learn
-- fynamic multi-dimensional arrays in C
+- dynamic multi-dimensional arrays in C

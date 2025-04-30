@@ -1238,6 +1238,18 @@ bool help_play_field_clear_row(struct play_field_s * play_field, int row)
    return row_cleared;
 }
 
+bool help_play_field_clear(struct play_field_s * play_field)
+{
+   if (NULL == play_field) return false;
+
+   for (int row = 0; row < PLAY_FIELD_HEIGHT; ++row)
+   {
+      help_play_field_clear_row(play_field, row);
+   }
+
+   return true;
+}
+
 bool help_play_field_row_empty(struct play_field_s * play_field, int row)
 {
    if (
@@ -1298,6 +1310,7 @@ void help_play_field_render_to_texture(struct play_field_s * play_field, struct 
    {
       for (int x = 0; x < PLAY_FIELD_WIDTH; ++x)
       {
+         /*
          // Render background
          help_texture_rgba_plot_aabb(
             help_engine_get_tex_virtual(engine),
@@ -1307,6 +1320,7 @@ void help_play_field_render_to_texture(struct play_field_s * play_field, struct 
             PLAY_FIELD_TILE_SIZE,
             color_rgba_make_rgba(0, 50, 0, 0xFF)
          );
+         */
 
          // Render placed cell by type
          const struct play_field_cell_s * CELL = &play_field->cells[x][y];
@@ -2238,6 +2252,8 @@ int main(int argc, char * argv[])
          else if (GAME_STATE_GAME_OVER == game_state)
          {
             // Action - Game over
+            help_play_field_clear(&play_field);
+
             // TODO-GS: Continue player feedback loop
          }
          else if (GAME_STATE_NONE == game_state)
@@ -2255,10 +2271,16 @@ int main(int argc, char * argv[])
       }
 
       // Render to scene - All game states
+      // ----> Clear offline texture
+      const color_rgba_t COL_GBC_LIGHTEST = color_rgba_make_rgba(238, 255, 102, 0xFF);
+      help_texture_rgba_clear(engine.tex_virtual, COL_GBC_LIGHTEST);
       // ----> Play field
       help_play_field_render_to_texture(&play_field, &engine);
-      // ----> Active tetro
-      help_tetro_render_to_texture(&tetro_active, &engine);
+      // ----> Active tetro while not game over
+      if (GAME_STATE_GAME_OVER != game_state)
+      {
+         help_tetro_render_to_texture(&tetro_active, &engine);
+      }
       // ----> Play field walls
       for (int y_wall = 0; y_wall < PLAY_FIELD_HEIGHT; ++y_wall)
       {
@@ -2309,11 +2331,6 @@ int main(int argc, char * argv[])
       {
          help_engine_render_text_at_tile(&engine, "Game\n\nOver", 4, PLAY_FIELD_HEIGHT - 4);
       }
-      help_engine_render_tinted_text_at_tile(&engine, "Red", 4, PLAY_FIELD_HEIGHT - 1, color_rgba_make_rgba(255, 0, 0, 255));
-      help_engine_render_tinted_text_at_tile(&engine, "Green", 4, PLAY_FIELD_HEIGHT - 2, color_rgba_make_rgba(0, 255, 0, 255));
-      help_engine_render_tinted_text_at_tile(&engine, "Blue", 4, PLAY_FIELD_HEIGHT - 3, color_rgba_make_rgba(0, 0, 255, 255));
-      help_engine_render_tinted_text_at_tile(&engine, "Black", 4, PLAY_FIELD_HEIGHT - 4, color_rgba_make_rgba(0, 0, 0, 255));
-      help_engine_render_tinted_text_at_tile(&engine, "White", 4, PLAY_FIELD_HEIGHT - 5, color_rgba_make_rgba(255, 255, 255, 255));
 
       // TODO-GS: Timed rendering when VSync off ?
       // Copy offline to online texture
