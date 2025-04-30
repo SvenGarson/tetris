@@ -417,8 +417,9 @@ bool help_tex_sprite_render(struct sprite_s sprite, int x, int y, struct texture
          );
          const color_rgba_t SAFE_SOURCE_TEXEL_COLOR = SUCCESS_ACCESS_SOURCE_TEXEL ? source_texel_color : color_rgba_make_rgba(0xFF, 0x00, 0xFF, 0xFF);
 
-         // Do not draw totally transparent texels for now
-         if (0 == color_rgba_channel_alpha(SAFE_SOURCE_TEXEL_COLOR))
+         // TODO-GS: Decide how to render overlapping stuff
+         const bool DONT_RENDER_TRANSPARENT_TEXELS = true;
+         if (DONT_RENDER_TRANSPARENT_TEXELS && (0x00 == color_rgba_channel_alpha(SAFE_SOURCE_TEXEL_COLOR)))
          {
             continue;
          }
@@ -948,70 +949,6 @@ bool help_input_key_pressed_or_held(struct input_s * input, enum custom_key_e ke
    );
 }
 
-// Helper - Font rendering
-struct font_render_glyph_s {
-   bool is_mapped;
-   struct sprite_s sprite;
-};
-
-#define FONT_RENDER_MAX_GLYPHS (256)
-struct font_render_s {
-   struct font_render_glyph_s glyphs[FONT_RENDER_MAX_GLYPHS];
-};
-
-struct font_render_glyph_s font_render_glyph_make(bool is_mapped, struct sprite_s sprite)
-{
-   struct font_render_glyph_s glyph;
-
-   glyph.is_mapped = is_mapped;
-   glyph.sprite = sprite;
-
-   return glyph;
-}
-
-void help_font_render_destroy(struct font_render_s * instance)
-{
-   if (instance)
-   {
-      free(instance);
-   }
-}
-
-struct font_render_s * help_font_render_create(void)
-{
-   struct font_render_s * instance = malloc(sizeof(struct font_render_s));
-   
-   if (instance)
-   {
-      for (int ascii_code = 0; ascii_code < FONT_RENDER_MAX_GLYPHS; ++ascii_code)
-      {
-         instance->glyphs[ascii_code].is_mapped = false;
-      }
-   }
-
-   return instance;
-}
-   
-bool help_font_render_ascii_in_valid(int ascii_code)
-{
-   return (
-      ascii_code < 0 ||
-      ascii_code >= FONT_RENDER_MAX_GLYPHS
-   ) ? true : false;
-}
-
-bool help_font_render_register_glyph(struct font_render_s * instance, char glyph_char, struct sprite_s sprite)
-{
-   const int ASCII_CODE = (int)glyph_char;
-   if (NULL == instance || help_font_render_ascii_in_valid(ASCII_CODE)) return false;
-
-   // Register and map glyph to sprite
-   instance->glyphs[ASCII_CODE] = font_render_glyph_make(true, sprite);
-
-   // Success
-   return true;
-}
-
 // Helpers - Border rendering
 enum sprite_map_tile_e {
    SPRITE_MAP_TILE_TETRO_BLOCK_I,
@@ -1023,6 +960,42 @@ enum sprite_map_tile_e {
    SPRITE_MAP_TILE_TETRO_BLOCK_Z,
    SPRITE_MAP_TILE_BRICK,
    SPRITE_MAP_TILE_HIGHLIGHT,
+   SPRITE_MAP_TILE_FONT_GLYPH_A,
+   SPRITE_MAP_TILE_FONT_GLYPH_B,
+   SPRITE_MAP_TILE_FONT_GLYPH_C,
+   SPRITE_MAP_TILE_FONT_GLYPH_D,
+   SPRITE_MAP_TILE_FONT_GLYPH_E,
+   SPRITE_MAP_TILE_FONT_GLYPH_F,
+   SPRITE_MAP_TILE_FONT_GLYPH_G,
+   SPRITE_MAP_TILE_FONT_GLYPH_H,
+   SPRITE_MAP_TILE_FONT_GLYPH_I,
+   SPRITE_MAP_TILE_FONT_GLYPH_J,
+   SPRITE_MAP_TILE_FONT_GLYPH_K,
+   SPRITE_MAP_TILE_FONT_GLYPH_L,
+   SPRITE_MAP_TILE_FONT_GLYPH_M,
+   SPRITE_MAP_TILE_FONT_GLYPH_N,
+   SPRITE_MAP_TILE_FONT_GLYPH_O,
+   SPRITE_MAP_TILE_FONT_GLYPH_P,
+   SPRITE_MAP_TILE_FONT_GLYPH_Q,
+   SPRITE_MAP_TILE_FONT_GLYPH_R,
+   SPRITE_MAP_TILE_FONT_GLYPH_S,
+   SPRITE_MAP_TILE_FONT_GLYPH_T,
+   SPRITE_MAP_TILE_FONT_GLYPH_U,
+   SPRITE_MAP_TILE_FONT_GLYPH_V,
+   SPRITE_MAP_TILE_FONT_GLYPH_W,
+   SPRITE_MAP_TILE_FONT_GLYPH_X,
+   SPRITE_MAP_TILE_FONT_GLYPH_Y,
+   SPRITE_MAP_TILE_FONT_GLYPH_Z,
+   SPRITE_MAP_TILE_FONT_GLYPH_0,
+   SPRITE_MAP_TILE_FONT_GLYPH_1,
+   SPRITE_MAP_TILE_FONT_GLYPH_2,
+   SPRITE_MAP_TILE_FONT_GLYPH_3,
+   SPRITE_MAP_TILE_FONT_GLYPH_4,
+   SPRITE_MAP_TILE_FONT_GLYPH_5,
+   SPRITE_MAP_TILE_FONT_GLYPH_6,
+   SPRITE_MAP_TILE_FONT_GLYPH_7,
+   SPRITE_MAP_TILE_FONT_GLYPH_8,
+   SPRITE_MAP_TILE_FONT_GLYPH_9,
    SPRITE_MAP_TILE_NA,
    SPRITE_MAP_TILE_COUNT
 };
@@ -1114,9 +1087,7 @@ bool help_bounds_out_of_region(int min_x, int min_y, int width, int height, int 
 
 // Helpers - Engine
 struct engine_s {
-   // Components
-
-   // Resources
+   struct font_render_s * font_render;
    struct texture_rgba_s * tex_virtual;
    struct texture_rgba_s * tex_sprites;
    struct sprite_map_s * sprite_map;
@@ -1661,6 +1632,125 @@ struct list_of_rows_s help_play_field_list_of_full_rows(struct play_field_s * pl
    return lor;
 }
 
+// Helpers - Font rendering
+struct font_render_glyph_s {
+   bool is_mapped;
+   enum sprite_map_tile_e sprite_tile;
+};
+
+#define FONT_RENDER_MAX_GLYPHS (256)
+struct font_render_s {
+   struct font_render_glyph_s glyphs[FONT_RENDER_MAX_GLYPHS];
+};
+
+struct font_render_glyph_s font_render_glyph_make_mapped(enum sprite_map_tile_e sprite_tile)
+{
+   struct font_render_glyph_s glyph;
+
+   glyph.is_mapped = true;
+   glyph.sprite_tile = sprite_tile;
+
+   return glyph;
+}
+
+bool font_render_make(struct font_render_s * instance)
+{
+   if (NULL == instance) return false;
+
+   // Start with all glyphs as non-mapped
+   for (int ascii_code = 0; ascii_code < FONT_RENDER_MAX_GLYPHS; ++ascii_code)
+   {
+      struct font_render_glyph_s * new_glyph = instance->glyphs + ascii_code;
+
+      // Un-mapped glyphs are un-usable, so the type does not matter
+      new_glyph->is_mapped = false;
+   }
+
+   return true;
+}
+
+bool help_font_render_ascii_code_in_valid(int ascii_code)
+{
+   return (ascii_code < 0 || ascii_code >= FONT_RENDER_MAX_GLYPHS) ? true : false;
+}
+
+bool help_font_render_map_ascii_to_sprite(struct font_render_s * instance, char character, enum sprite_map_tile_e sprite_tile)
+{
+   const int ASCII_CODE = (int)character;
+   if (NULL == instance | help_font_render_ascii_code_in_valid(ASCII_CODE)) return false;
+
+   instance->glyphs[ASCII_CODE] = font_render_glyph_make_mapped(sprite_tile);
+
+   return true;
+}
+
+bool help_font_render_char_mapped(struct font_render_s * instance, char character)
+{
+   return instance && instance->glyphs[(int)character].is_mapped;
+}
+
+// Additional engine based rendering
+bool help_engine_render_text_at(struct engine_s * engine, const char * text, int tile_x, int tile_y)
+{
+   if (NULL == engine || NULL == text) return false;
+
+   struct vec_2i_s tile_cursor = vec_2i_make_xy(tile_x, tile_y);
+
+   for (int i_char = 0; i_char < strlen(text); ++i_char)
+   {
+      const char TEXT_CHAR_UPPERCASED = toupper(text[i_char]);
+
+      if ('\n' == TEXT_CHAR_UPPERCASED)
+      {
+         // Newline
+         tile_cursor.x = tile_x;
+         tile_cursor.y -= 1;
+      }
+      else if ('\t' == TEXT_CHAR_UPPERCASED)
+      {
+         // Horizontal tab
+         const int SPACES_PER_TAB = 1;
+         tile_cursor.x += SPACES_PER_TAB;
+      }
+      else if (' ' == TEXT_CHAR_UPPERCASED)
+      {
+         // Space
+         tile_cursor.x += 1;
+      }
+      else if (help_font_render_char_mapped(engine->font_render, TEXT_CHAR_UPPERCASED))
+      {
+         // Renderable font character
+         const int CHAR_ASCII = (int)TEXT_CHAR_UPPERCASED;
+         help_render_engine_sprite(
+            engine,
+            tile_cursor.x * PLAY_FIELD_TILE_SIZE,
+            tile_cursor.y * PLAY_FIELD_TILE_SIZE,
+            engine->font_render->glyphs[CHAR_ASCII].sprite_tile
+         );
+
+         tile_cursor.x += 1;
+      }
+      else
+      {
+         // Not supported
+         printf("\nCannot render un-supported ascii glyph '%d'", (int)TEXT_CHAR_UPPERCASED);
+
+         // Render debug thing
+         help_render_engine_sprite(
+            engine,
+            tile_cursor.x * PLAY_FIELD_TILE_SIZE,
+            tile_cursor.y * PLAY_FIELD_TILE_SIZE,
+            SPRITE_MAP_TILE_NA
+         );
+
+         tile_cursor.x += 1;
+      }
+   }
+
+   // Success
+   return true;
+}
+
 // Logic - Main
 int main(int argc, char * argv[])
 {
@@ -1790,6 +1880,7 @@ int main(int argc, char * argv[])
       printf("\nFailed to create sprite map");
       return EXIT_FAILURE;
    }
+   // ----> Register tetro sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_I, 0, 7);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_O, 1, 6);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_Lr, 2, 6);
@@ -1797,15 +1888,98 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_S, 4, 6);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_T, 5, 6);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_Z, 6, 6);
-
+   // ----> Register play field sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BRICK, 0, 4);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_HIGHLIGHT, 12, 2);   
+   // ----> Register font rendering sprites
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_A, 0, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_B, 1, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_C, 2, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_D, 3, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_E, 4, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_F, 5, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_G, 6, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_H, 7, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_I, 8, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_J, 9, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_K, 10, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_L, 11, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_M, 12, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_N, 13, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_O, 14, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_P, 15, 0);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_Q, 0, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_R, 1, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_S, 2, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_T, 3, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_U, 4, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_V, 5, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_W, 6, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_X, 7, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_Y, 8, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_Z, 9, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_0, 0, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_1, 1, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_2, 2, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_3, 3, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_4, 4, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_5, 5, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_6, 6, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_7, 7, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_8, 8, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_9, 9, 2);
+
+   // Create font render component
+   struct font_render_s font_render;
+   if (false == font_render_make(&font_render))
+   {
+      printf("\nFailed to create font render component");
+      return EXIT_FAILURE;
+   }
+   // ----> Map font render ascii codes to renderable sprites
+   help_font_render_map_ascii_to_sprite(&font_render, 'A', SPRITE_MAP_TILE_FONT_GLYPH_A);
+   help_font_render_map_ascii_to_sprite(&font_render, 'B', SPRITE_MAP_TILE_FONT_GLYPH_B);
+   help_font_render_map_ascii_to_sprite(&font_render, 'C', SPRITE_MAP_TILE_FONT_GLYPH_C);
+   help_font_render_map_ascii_to_sprite(&font_render, 'D', SPRITE_MAP_TILE_FONT_GLYPH_D);
+   help_font_render_map_ascii_to_sprite(&font_render, 'E', SPRITE_MAP_TILE_FONT_GLYPH_E);
+   help_font_render_map_ascii_to_sprite(&font_render, 'F', SPRITE_MAP_TILE_FONT_GLYPH_F);
+   help_font_render_map_ascii_to_sprite(&font_render, 'G', SPRITE_MAP_TILE_FONT_GLYPH_G);
+   help_font_render_map_ascii_to_sprite(&font_render, 'H', SPRITE_MAP_TILE_FONT_GLYPH_H);
+   help_font_render_map_ascii_to_sprite(&font_render, 'I', SPRITE_MAP_TILE_FONT_GLYPH_I);
+   help_font_render_map_ascii_to_sprite(&font_render, 'J', SPRITE_MAP_TILE_FONT_GLYPH_J);
+   help_font_render_map_ascii_to_sprite(&font_render, 'K', SPRITE_MAP_TILE_FONT_GLYPH_K);
+   help_font_render_map_ascii_to_sprite(&font_render, 'L', SPRITE_MAP_TILE_FONT_GLYPH_L);
+   help_font_render_map_ascii_to_sprite(&font_render, 'M', SPRITE_MAP_TILE_FONT_GLYPH_M);
+   help_font_render_map_ascii_to_sprite(&font_render, 'N', SPRITE_MAP_TILE_FONT_GLYPH_N);
+   help_font_render_map_ascii_to_sprite(&font_render, 'O', SPRITE_MAP_TILE_FONT_GLYPH_O);
+   help_font_render_map_ascii_to_sprite(&font_render, 'P', SPRITE_MAP_TILE_FONT_GLYPH_P);
+   help_font_render_map_ascii_to_sprite(&font_render, 'Q', SPRITE_MAP_TILE_FONT_GLYPH_Q);
+   help_font_render_map_ascii_to_sprite(&font_render, 'R', SPRITE_MAP_TILE_FONT_GLYPH_R);
+   help_font_render_map_ascii_to_sprite(&font_render, 'S', SPRITE_MAP_TILE_FONT_GLYPH_S);
+   help_font_render_map_ascii_to_sprite(&font_render, 'T', SPRITE_MAP_TILE_FONT_GLYPH_T);
+   help_font_render_map_ascii_to_sprite(&font_render, 'U', SPRITE_MAP_TILE_FONT_GLYPH_U);
+   help_font_render_map_ascii_to_sprite(&font_render, 'V', SPRITE_MAP_TILE_FONT_GLYPH_V);
+   help_font_render_map_ascii_to_sprite(&font_render, 'W', SPRITE_MAP_TILE_FONT_GLYPH_W);
+   help_font_render_map_ascii_to_sprite(&font_render, 'X', SPRITE_MAP_TILE_FONT_GLYPH_X);
+   help_font_render_map_ascii_to_sprite(&font_render, 'Y', SPRITE_MAP_TILE_FONT_GLYPH_Y);
+   help_font_render_map_ascii_to_sprite(&font_render, 'Z', SPRITE_MAP_TILE_FONT_GLYPH_Z);
+   help_font_render_map_ascii_to_sprite(&font_render, '0', SPRITE_MAP_TILE_FONT_GLYPH_0);
+   help_font_render_map_ascii_to_sprite(&font_render, '1', SPRITE_MAP_TILE_FONT_GLYPH_1);
+   help_font_render_map_ascii_to_sprite(&font_render, '2', SPRITE_MAP_TILE_FONT_GLYPH_2);
+   help_font_render_map_ascii_to_sprite(&font_render, '3', SPRITE_MAP_TILE_FONT_GLYPH_3);
+   help_font_render_map_ascii_to_sprite(&font_render, '4', SPRITE_MAP_TILE_FONT_GLYPH_4);
+   help_font_render_map_ascii_to_sprite(&font_render, '5', SPRITE_MAP_TILE_FONT_GLYPH_5);
+   help_font_render_map_ascii_to_sprite(&font_render, '6', SPRITE_MAP_TILE_FONT_GLYPH_6);
+   help_font_render_map_ascii_to_sprite(&font_render, '7', SPRITE_MAP_TILE_FONT_GLYPH_7);
+   help_font_render_map_ascii_to_sprite(&font_render, '8', SPRITE_MAP_TILE_FONT_GLYPH_8);
+   help_font_render_map_ascii_to_sprite(&font_render, '9', SPRITE_MAP_TILE_FONT_GLYPH_9);
 
    // Package engine components
    struct engine_s engine;
    engine.tex_virtual = tex_virtual;
    engine.tex_sprites = tex_sprites;
    engine.sprite_map = sprite_map;
+   engine.font_render = &font_render;
 
    // Game state
    // ----> Tick state
@@ -2060,8 +2234,7 @@ int main(int argc, char * argv[])
             SPRITE_MAP_TILE_BRICK
          );
       }
-
-      // Additional rendering based on game state
+      // ----> Additional rendering based on game state
       if (GAME_STATE_REMOVE_LINES == game_state)
       {
          // Latch highlight rendering
@@ -2094,6 +2267,11 @@ int main(int argc, char * argv[])
             }
          }
       }
+      // ----> Testing text renderer
+      help_engine_render_text_at(&engine, "ABCDEFGHIJKLMNOP", 1, 8);
+      help_engine_render_text_at(&engine, "QRSTUVWXYZ", 1, 7);
+      help_engine_render_text_at(&engine, "0123456789", 1, 6);
+      help_engine_render_text_at(&engine, "LIST:\n\tApples\n\tSnacks\n\tMac'n Cheese", 1, 4);
 
       // TODO-GS: Timed rendering when VSync off ?
       // Copy offline to online texture
