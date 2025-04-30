@@ -1,10 +1,7 @@
 # Next Task
-> text rendering through existing sprite pipeline
-   - to upper for chars
-   - control chars: space, tab, newline
-   - a-z
-   - 0-9
+- text tinting in engine
 - game over text
+- underlined text_ line and dotted
 - timestep accumulated FDT interpolation + where to determine input state -> Currently double firing input states across ticks
 - test rotation masks, placing, collision etc.
 - render I tetro correctly based on rotation
@@ -48,6 +45,7 @@
 - adding source files, libraries, and linking to existing build process
 - disable terminal running on release build
 - timed rendering i.e. adding to batch for a certain time
+- config flag for debug output
 
 # Things to learn
 - fynamic multi-dimensional arrays in C

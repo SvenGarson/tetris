@@ -2200,7 +2200,7 @@ int main(int argc, char * argv[])
          else if (GAME_STATE_GAME_OVER == game_state)
          {
             // Action - Game over
-            printf("\nGAME OVER !");
+            // TODO-GS: Continue player feedback loop
          }
          else if (GAME_STATE_NONE == game_state)
          {
@@ -2267,11 +2267,10 @@ int main(int argc, char * argv[])
             }
          }
       }
-      // ----> Testing text renderer
-      help_engine_render_text_at(&engine, "ABCDEFGHIJKLMNOP", 1, 8);
-      help_engine_render_text_at(&engine, "QRSTUVWXYZ", 1, 7);
-      help_engine_render_text_at(&engine, "0123456789", 1, 6);
-      help_engine_render_text_at(&engine, "LIST:\n\tApples\n\tSnacks\n\tMac'n Cheese", 1, 4);
+      if (GAME_STATE_GAME_OVER == game_state)
+      {
+         help_engine_render_text_at(&engine, "Game\n\nOver", 4, PLAY_FIELD_HEIGHT - 4);
+      }
 
       // TODO-GS: Timed rendering when VSync off ?
       // Copy offline to online texture
