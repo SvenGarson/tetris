@@ -1913,17 +1913,6 @@ int main(int argc, char * argv[])
    printf("\n\t%-*s: %s", DW, "resource directory", DIR_ABS_RES);
    printf("\n\t%-*s: %s", DW, "VSYNC", SUCCESS_USE_VSYNC ? "enabled" : "disabled");
 
-   // FPS counter
-   double last_time_fps = help_sdl_time_in_seconds();
-   int frames_per_second = 0;
-
-   // Integration
-   const int TICKS_PER_SECOND = 50;
-   const double FIXED_DELTA_TIME = 1.0 / TICKS_PER_SECOND;
-   double time_simulated = 0.0;
-   double last_time_tick = help_sdl_time_in_seconds();
-   double fixed_delta_time_accumulator = 0.0;
-
    // Engine
    // ----> Sprite map
    struct sprite_map_s * sprite_map = help_sprite_map_create(tex_sprites, 13, 13, 8);
@@ -2051,6 +2040,18 @@ int main(int argc, char * argv[])
    // Shared game state transition data points
    int plot_row_min, plot_row_max;
    struct list_of_rows_s list_of_full_rows;
+
+   // FPS counter
+   double last_time_fps = help_sdl_time_in_seconds();
+   int frames_per_second = 0;
+
+   // Integration
+   const int TICKS_PER_SECOND = 50;
+   const double FIXED_DELTA_TIME = 1.0 / TICKS_PER_SECOND;
+   double time_simulated = 0.0;
+   double last_time_tick = help_sdl_time_in_seconds();
+   double fixed_delta_time_accumulator = 0.0;
+
    // Game loop
    bool tetris_close_requested = false;
    while (false == tetris_close_requested)
@@ -2069,11 +2070,12 @@ int main(int argc, char * argv[])
       const double NEW_TIME = help_sdl_time_in_seconds();
       const double LAST_FRAME_DURATION = help_sdl_time_in_seconds() - last_time_tick;
       last_time_tick = NEW_TIME;
-
       fixed_delta_time_accumulator += LAST_FRAME_DURATION;
+
+      // Iterative fixed time step integration
       while (fixed_delta_time_accumulator >= FIXED_DELTA_TIME)
       {
-         // TODO-GS: Fix missing input and double-firing etc.
+         // Update input state
          help_input_determine_intermediate_state(input);
 
          // Tick housekeeping

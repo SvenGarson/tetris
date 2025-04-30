@@ -1,5 +1,4 @@
 # Current task
-- Fix input multi-firing
 
 # Next tasks
 - music and sound effects
@@ -9,6 +8,7 @@
    - lines
    - next shape
 - add all required screens (splash, music type, game, game over, thx)
+- tweak timing and juice
 
 # Bugs to fix
 - multi-firing of input
