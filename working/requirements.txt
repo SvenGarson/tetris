@@ -1,9 +1,5 @@
-# Line deletion
-> Cycles
-   - movement
-   - place
-   - line removal
-   - spaw
+# Bugs
+- Rotation against the wall clips
 
 # Next Task
 - game over text

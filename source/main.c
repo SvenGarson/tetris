@@ -403,7 +403,6 @@ bool help_tex_sprite_render(struct sprite_s sprite, int x, int y, struct texture
 {
    if (NULL == texture_sprite || NULL == texture_target) return false;
 
-   // TODO-GS: Plot only what is stricly necessary
    for (int spr_y = 0; spr_y < sprite.texture_size.y; ++spr_y)
    {
       for (int spr_x = 0; spr_x < sprite.texture_size.x; ++spr_x)
@@ -419,7 +418,6 @@ bool help_tex_sprite_render(struct sprite_s sprite, int x, int y, struct texture
          const color_rgba_t SAFE_SOURCE_TEXEL_COLOR = SUCCESS_ACCESS_SOURCE_TEXEL ? source_texel_color : color_rgba_make_rgba(0xFF, 0x00, 0xFF, 0xFF);
 
          // Do not draw totally transparent texels for now
-         // TODO-GS: Implement alpha blending ?
          if (0 == color_rgba_channel_alpha(SAFE_SOURCE_TEXEL_COLOR))
          {
             continue;
@@ -1217,6 +1215,15 @@ bool help_play_field_set_cell(struct play_field_s * play_field, int x, int y, st
    return true;
 }
 
+bool help_play_field_access_cell(struct play_field_s * play_field, int x, int y, struct play_field_cell_s * out_cell)
+{
+   if (NULL == play_field || NULL == out_cell || help_play_field_coords_out_of_bounds(play_field, x, y)) return false;
+
+   *out_cell = play_field->cells[x][y];
+
+   return true;
+}
+
 bool help_play_field_clear_row(struct play_field_s * play_field, int row)
 {
    if (NULL == play_field) return false;
@@ -1234,13 +1241,24 @@ bool help_play_field_clear_row(struct play_field_s * play_field, int row)
    return row_cleared;
 }
 
-bool help_play_field_consolidate(struct play_field_s * play_field)
+bool help_play_field_row_empty(struct play_field_s * play_field, int row)
 {
-   if (NULL == play_field) return false;
+   if (
+      NULL == play_field ||
+      row < 0 ||
+      row >= PLAY_FIELD_HEIGHT
+   ) return true;
 
-   printf("\nConsolidate ...");
+   int occupied_cell_count = 0;
+   for (int col = 0; col < PLAY_FIELD_WIDTH; ++col)
+   {
+      if (true == play_field->cells[col][row].occupied)
+      {
+         ++occupied_cell_count;
+      }
+   }
 
-   return true;
+   return (0 == occupied_cell_count);
 }
 
 enum sprite_map_tile_e help_tetro_type_to_sprite_tile(enum tetro_type_e tetro_type)
@@ -1310,6 +1328,43 @@ void help_play_field_render_to_texture(struct play_field_s * play_field, struct 
          );
       }
    }
+}
+
+bool help_play_field_consolidate(struct play_field_s * play_field)
+{
+   if (NULL == play_field) return false;
+
+   struct play_field_s play_field_consolidated = help_play_field_make_non_occupied();
+
+   int row_new = 0;
+   for (int row_old = 0; row_old < PLAY_FIELD_HEIGHT; ++row_old)
+   {
+      // Ignore empty rows
+      if (help_play_field_row_empty(play_field, row_old))
+      {
+         continue;
+      }
+
+      // Copy non-empty row to new play field
+      for (int col = 0; col < PLAY_FIELD_WIDTH; ++col)
+      {
+         // TODO-GS: Safe access and setting of cells
+         struct play_field_cell_s cell_old;
+         if (help_play_field_access_cell(play_field, col, row_old, &cell_old))
+         {
+            help_play_field_set_cell(&play_field_consolidated, col, row_new, cell_old);
+         }
+      }
+      
+      // To next row
+      ++row_new;
+   }
+
+   // Replace old with new play field
+   memcpy(play_field->cells, play_field_consolidated.cells, sizeof(play_field_consolidated));
+
+   // Success
+   return true;
 }
 
 // Helpers - Tetro spawning
@@ -1445,6 +1500,50 @@ bool help_tetro_move_collides(const struct tetro_world_s * TETRO, struct play_fi
    return false;
 }
 
+enum rotation_e {
+   ROTATION_CW,
+   ROTATION_CCW
+};
+
+bool help_tetro_rotation_collides(const struct tetro_world_s * TETRO, struct play_field_s * play_field, enum rotation_e rotation)
+{
+   if (NULL == TETRO || NULL == play_field) return true;
+
+   // Does any tetro design cell overlap an occupied play field cell ?
+   for (int ty = 0; ty < TETRO->data.size; ++ty)
+   {
+      for (int tx = 0; tx < TETRO->data.size; ++tx)
+      {
+         // Ignore non-plotted rotation cells
+         const bool ROTATION_CELL_PLOTTED = (ROTATION_CW == rotation) ? TETRO->data.right[tx][ty] : TETRO->data.left[tx][ty];
+         if (false == ROTATION_CELL_PLOTTED)
+         {
+            continue;
+         }
+
+         // Out-of play field bounds is considered a collision
+         const struct vec_2i_s TETRO_TILE_CELL_POS = vec_2i_make_xy(TETRO->tile_pos.x + tx, TETRO->tile_pos.y + ty);
+         if (help_play_field_coords_out_of_bounds(play_field, TETRO_TILE_CELL_POS.x, TETRO_TILE_CELL_POS.y))
+         {
+            return true;
+         }
+
+         // Overlapping occupied play field cell is considered a collision
+         struct play_field_cell_s corresp_field_cell;
+         if (help_play_field_access_cell(play_field, TETRO_TILE_CELL_POS.x, TETRO_TILE_CELL_POS.y, &corresp_field_cell))
+         {
+            if (corresp_field_cell.occupied)
+            {
+               // Rotation collides with play field
+               return true;
+            }
+         }
+      }
+   }
+
+   // No collision detected
+   return false;
+}
 
 bool help_tetro_drop(const struct tetro_world_s * TETRO, struct play_field_s * play_field, int * out_plot_row_min, int * out_plot_row_max)
 {
@@ -1774,11 +1873,17 @@ int main(int argc, char * argv[])
             // Action - Rotate tetro
             if (help_input_key_pressed(input, CUSTOM_KEY_A))
             {
-               help_tetro_world_rotate_cw(&tetro_active);
+               if (!help_tetro_rotation_collides(&tetro_active, &play_field, ROTATION_CW))
+               {
+                  help_tetro_world_rotate_cw(&tetro_active);
+               }
             }
             if (help_input_key_pressed(input, CUSTOM_KEY_B))
             {
-               help_tetro_world_rotate_ccw(&tetro_active);
+               if (!help_tetro_rotation_collides(&tetro_active, &play_field, ROTATION_CCW))
+               {
+                  help_tetro_world_rotate_ccw(&tetro_active);
+               }
             }
 
             // Action - Drop tetro
@@ -1895,10 +2000,10 @@ int main(int argc, char * argv[])
          }
          else if (GAME_STATE_CONSOLIDATE_PLAY_FIELD == game_state)
          {
-            // Action - Consolidate play field after full row deletion
+            // Action - Consolidate play field after full row deletion - Until no more rows are moved
             help_play_field_consolidate(&play_field);
 
-            // Back to gameplay
+            // Spawn new tetro
             next_game_state = GAME_STATE_RESPAWN;
          }
          else if (GAME_STATE_RESPAWN == game_state)
@@ -1960,7 +2065,6 @@ int main(int argc, char * argv[])
       if (GAME_STATE_REMOVE_LINES == game_state)
       {
          // Latch highlight rendering
-         // TODO-GS: Flash only the full rows !
          const double TIME_DELTA_ROW_FLASH = 0.22;
          static bool highlight_latch = true;
          if (help_sdl_time_in_seconds() >= time_last_removal_flash_timer + TIME_DELTA_ROW_FLASH)
@@ -1975,14 +2079,15 @@ int main(int argc, char * argv[])
          // Highlight rows on timer
          if (highlight_latch)
          {
-            for (int deletion_row = plot_row_min; deletion_row <= plot_row_max; ++deletion_row)
+            for (int i_full_rows = 0; i_full_rows < list_of_full_rows.count; ++i_full_rows)
             {
+               const int DELETION_ROW = list_of_full_rows.list[i_full_rows];
                for (int deletion_col = 0; deletion_col < PLAY_FIELD_WIDTH; ++deletion_col)
                {
                   help_render_engine_sprite(
                      &engine,
                      PLAY_FIELD_OFFSET_HORI_PIXELS + (deletion_col * PLAY_FIELD_TILE_SIZE),
-                     deletion_row * PLAY_FIELD_TILE_SIZE,
+                     DELETION_ROW * PLAY_FIELD_TILE_SIZE,
                      SPRITE_MAP_TILE_HIGHLIGHT
                   );
                }
