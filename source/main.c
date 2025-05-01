@@ -1803,6 +1803,22 @@ bool help_engine_render_tinted_text_at_tile(struct engine_s * engine, const char
    return help_engine_render_tinted_text_at_tile_internal(engine, text, tile_x, tile_y, true, tint);
 }
 
+// Helpers - Levels
+struct score_level_mapping_s {
+   int threshold_score;
+   int mapped_level;
+};
+
+struct score_level_mapping_s score_level_mapping_make(int threshold_score, int mapped_level)
+{
+   struct score_level_mapping_s mapping;
+
+   mapping.threshold_score = threshold_score;
+   mapping.mapped_level = mapped_level;
+
+   return mapping;
+}
+
 // Logic - Main
 int main(int argc, char * argv[])
 {
@@ -2015,6 +2031,20 @@ int main(int argc, char * argv[])
    help_font_render_map_ascii_to_sprite(&font_render, '8', SPRITE_MAP_TILE_FONT_GLYPH_8);
    help_font_render_map_ascii_to_sprite(&font_render, '9', SPRITE_MAP_TILE_FONT_GLYPH_9);
 
+   // Score level mappings
+   struct score_level_mapping_s score_level_mapping[] = {
+      score_level_mapping_make(0, 0),
+      score_level_mapping_make(20, 1),
+      score_level_mapping_make(40, 2),
+      score_level_mapping_make(60, 3),
+      score_level_mapping_make(80, 4),
+      score_level_mapping_make(100, 5),
+      score_level_mapping_make(120, 6),
+      score_level_mapping_make(140, 7),
+      score_level_mapping_make(160, 8),
+      score_level_mapping_make(180, 9)
+   };
+
    // Package engine components
    struct engine_s engine;
    engine.tex_virtual = tex_virtual;
@@ -2040,6 +2070,10 @@ int main(int argc, char * argv[])
    // Shared game state transition data points
    int plot_row_min, plot_row_max;
    struct list_of_rows_s list_of_full_rows;
+   // ----> Stats
+   int stat_score = 0;
+   int stat_lines = 0;
+   int stat_level = 0;
 
    // FPS counter
    double last_time_fps = help_sdl_time_in_seconds();
@@ -2085,6 +2119,10 @@ int main(int argc, char * argv[])
          // Tick based on game state
          if (GAME_STATE_NEW_GAME == game_state)
          {
+            // Restart stats
+            stat_score = 0;
+            stat_lines = 0;
+            stat_level = 0;
             // TODO-GS: Tetro flashes from 2 init's because first frame renders, but does not tick (no DT accumulated yet)
             // Action - New game
             play_field = help_play_field_make_non_occupied();
@@ -2209,16 +2247,17 @@ int main(int argc, char * argv[])
             if (help_sdl_time_in_seconds() >= time_last_row_deletion_timer + TIME_DELTA_ROW_DELETION)
             {
                // Time to delete rows
-               for (int row = 0; row < list_of_full_rows.count; ++row)
+               // Clear all rows that were detected full on tetro placement
+               for (int i_del_row = 0; i_del_row < list_of_full_rows.count; ++i_del_row)
                {
-                  for (int col = 0; col < PLAY_FIELD_WIDTH; ++col)
+                  const int DELETION_ROW = list_of_full_rows.list[i_del_row];
+                  if (help_play_field_clear_row(&play_field, DELETION_ROW))
                   {
-                     // Clear all rows that were detected full on tetro placement
-                     for (int i_del_row = 0; i_del_row < list_of_full_rows.count; ++i_del_row)
-                     {
-                        const int DELETION_ROW = list_of_full_rows.list[i_del_row];
-                        help_play_field_clear_row(&play_field, DELETION_ROW);
-                     }
+                     // Reflect in stats
+                     ++stat_lines;
+
+                     // TODO-GS: Score line removal
+                     stat_score += 10;
                   }
                }
 
@@ -2262,6 +2301,28 @@ int main(int argc, char * argv[])
          {
             // Action - None - Should never happen
             printf("\nGame state NONE - Nothing to simulate");
+         }
+
+         // Level detection
+         // TODO-GS: Parameterize level-up's and use a clean table instead of this
+         const struct score_level_mapping_s * ACTIVE_SCORE_MAPPING = NULL;
+         for (size_t i = 0; i < (sizeof(score_level_mapping) / sizeof(score_level_mapping[0])); ++i)
+         {
+            const struct score_level_mapping_s * SCORE_MAPPING_CANDIDATE = score_level_mapping + i;
+            if (stat_score >= SCORE_MAPPING_CANDIDATE->threshold_score)
+            {
+               ACTIVE_SCORE_MAPPING = SCORE_MAPPING_CANDIDATE;
+            }
+         }
+
+         // Set level based on found mapping
+         if (ACTIVE_SCORE_MAPPING)
+         {
+            stat_level = ACTIVE_SCORE_MAPPING->mapped_level;
+         }
+         else
+         {
+            stat_level = -1;
          }
 
          // Game state housekeeping
@@ -2333,6 +2394,24 @@ int main(int argc, char * argv[])
       {
          help_engine_render_text_at_tile(&engine, "Game\n\nOver", 4, PLAY_FIELD_HEIGHT - 4);
       }
+      // ----> Stats
+      const char * STR_LABEL_SCORE = "SCORE";
+      help_engine_render_text_at_tile(&engine, STR_LABEL_SCORE, 13, PLAY_FIELD_HEIGHT - 2);
+      char str_stat_score[32];
+      snprintf(str_stat_score, sizeof(str_stat_score), "%*d", strlen(STR_LABEL_SCORE), stat_score);
+      help_engine_render_text_at_tile(&engine, str_stat_score, 13, PLAY_FIELD_HEIGHT - 4);
+
+      const char * STR_LABEL_LEVEL = "LEVEL";
+      help_engine_render_text_at_tile(&engine, STR_LABEL_LEVEL, 13, PLAY_FIELD_HEIGHT - 8);
+      char str_stat_level[32];
+      snprintf(str_stat_level, sizeof(str_stat_level), "%*d", strlen(STR_LABEL_LEVEL), stat_level);
+      help_engine_render_text_at_tile(&engine, str_stat_level, 13, PLAY_FIELD_HEIGHT - 9);
+
+      const char * STR_LABEL_LINES = "LINES";
+      help_engine_render_text_at_tile(&engine, STR_LABEL_LINES, 13, PLAY_FIELD_HEIGHT - 11);
+      char str_stat_lines[32];
+      snprintf(str_stat_lines, sizeof(str_stat_lines), "%*d", strlen(STR_LABEL_LINES), stat_lines);
+      help_engine_render_text_at_tile(&engine, str_stat_lines, 13, PLAY_FIELD_HEIGHT - 12);
 
       // TODO-GS: Timed rendering when VSync off ?
       // Copy offline to online texture

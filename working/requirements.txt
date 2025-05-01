@@ -1,14 +1,15 @@
 # Current task
+> simulate and render statistics on GUI
+   - next shape
 
 # Next tasks
 - music and sound effects
-> simulate and render statistics on GUI
-   - score
-   - level
-   - lines
-   - next shape
+- pause mode
 - add all required screens (splash, music type, game, game over, thx)
-- tweak timing and juice
+> tweak timing and juice
+   - bonus on 4x lines removes + blip
+   - finish gui mockup (borders, underlines, etc)
+   - parameterize game design and events to all 3 stats
 
 # Bugs to fix
 - multi-firing of input
