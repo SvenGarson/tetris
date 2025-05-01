@@ -1411,7 +1411,68 @@ struct tetro_world_s help_tetro_world_clone_at_position(const struct tetro_world
    return clone;
 }
 
-// Helpers - Rendering stufF
+// Helpers - Rendering stuff
+void help_tetro_render_to_texture_at_tile_without_position(struct tetro_world_s * tetro, struct engine_s * engine, int tile_x, int tile_y)
+{
+   if (NULL == tetro || NULL == engine) return;
+
+   // Render tetro at tile position
+   for (int ty = 0; ty < tetro->data.size; ++ty)
+   {
+      for (int tx = 0; tx < tetro->data.size; ++tx)
+      {
+         // Design cells
+         const bool IS_DESIGN_CELL = tetro->data.design[tx][ty];
+         if (IS_DESIGN_CELL)
+         {
+            help_render_engine_sprite(
+               engine,
+               (tile_x * PLAY_FIELD_TILE_SIZE) + (tx * PLAY_FIELD_TILE_SIZE),
+               (tile_y* PLAY_FIELD_TILE_SIZE) + (ty * PLAY_FIELD_TILE_SIZE),
+               help_tetro_type_to_sprite_tile(tetro->data.type)
+            );
+         }
+
+         // Tetro debug rendering configured ?
+         if (false == CONFIG_DO_RENDER_TETRO_COLLISION_MASKS)
+         {
+            continue;
+         }
+
+         // CCW collision mask
+         const bool IS_CCW_COLLISION_CELL = tetro->data.left[tx][ty];
+         if (IS_CCW_COLLISION_CELL)
+         {
+            // Render CCW cells a full-sized tile
+            help_texture_rgba_plot_aabb_outline(
+               help_engine_get_tex_virtual(engine),
+               (tile_x * PLAY_FIELD_TILE_SIZE) + (tx * PLAY_FIELD_TILE_SIZE),
+               (tile_y* PLAY_FIELD_TILE_SIZE) + (ty * PLAY_FIELD_TILE_SIZE),
+               PLAY_FIELD_TILE_SIZE,
+               PLAY_FIELD_TILE_SIZE,
+               color_rgba_make_rgba(150, 0, 0, 255)
+            );
+         }
+
+         // CW collision mask
+         const bool IS_CW_COLLISION_CELL = tetro->data.right[tx][ty];
+         if (IS_CW_COLLISION_CELL)
+         {
+            // Render CW cells a less than tile-size tile
+            const int INSET = 2;
+            help_texture_rgba_plot_aabb_outline(
+               help_engine_get_tex_virtual(engine),
+               (tile_x * PLAY_FIELD_TILE_SIZE) + (tx * PLAY_FIELD_TILE_SIZE) + INSET,
+               (tile_y* PLAY_FIELD_TILE_SIZE) + (ty * PLAY_FIELD_TILE_SIZE) + INSET,
+               PLAY_FIELD_TILE_SIZE - (2 * INSET),
+               PLAY_FIELD_TILE_SIZE - (2 * INSET),
+               color_rgba_make_rgba(0, 150, 0, 255)
+            );
+         }
+      }
+   }
+}
+
 void help_tetro_render_to_texture(struct tetro_world_s * tetro, struct engine_s * engine)
 {
    if (NULL == tetro || NULL == engine) return;
@@ -2060,6 +2121,7 @@ int main(int argc, char * argv[])
    struct play_field_s play_field = help_play_field_make_non_occupied();
    // ----> Active tetro
    struct tetro_world_s tetro_active = help_tetro_world_make_random_at_spawn();
+   struct tetro_world_s tetro_next = help_tetro_world_make_random_at_spawn();
    // ---- Timers
    double time_last_tetro_drop = help_sdl_time_in_seconds();
    double time_last_tetro_player_move = help_sdl_time_in_seconds();
@@ -2123,6 +2185,8 @@ int main(int argc, char * argv[])
             stat_score = 0;
             stat_lines = 0;
             stat_level = 0;
+            // Kickstart next tetro
+            tetro_next = help_tetro_world_make_random_at_spawn();
             // TODO-GS: Tetro flashes from 2 init's because first frame renders, but does not tick (no DT accumulated yet)
             // Action - New game
             play_field = help_play_field_make_non_occupied();
@@ -2275,8 +2339,9 @@ int main(int argc, char * argv[])
          }
          else if (GAME_STATE_RESPAWN == game_state)
          {
-            // Action - Respawn new tetro
-            tetro_active = help_tetro_world_make_random_at_spawn();
+            // Select active and next tetro
+            tetro_active = tetro_next;
+            tetro_next = help_tetro_world_make_random_at_spawn();
 
             // Game over if new tetro overlaps any occupied play field cell
             if (help_tetro_move_collides(&tetro_active, &play_field, 0, 0))
@@ -2412,6 +2477,8 @@ int main(int argc, char * argv[])
       char str_stat_lines[32];
       snprintf(str_stat_lines, sizeof(str_stat_lines), "%*d", strlen(STR_LABEL_LINES), stat_lines);
       help_engine_render_text_at_tile(&engine, str_stat_lines, 13, PLAY_FIELD_HEIGHT - 12);
+      // ----> Next tetro
+      help_tetro_render_to_texture_at_tile_without_position(&tetro_next, &engine, 14, 1);
 
       // TODO-GS: Timed rendering when VSync off ?
       // Copy offline to online texture
