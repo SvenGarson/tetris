@@ -24,6 +24,7 @@
          - stop / kill / clear (all channels)
    > Problems
       - flushing required ?
+      - clearing stream pauses it ?
 
 # Audio usage
 

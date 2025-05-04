@@ -1887,12 +1887,16 @@ struct audio_mixer_wav_s {
    Uint32 length;
 };
 
-#define AUDIO_MIXER_MAX_WAV_COUNT (3)
+#define AUDIO_MIXER_MAX_WAV_COUNT (64)
+#define AUDIO_MIXER_SFX_CHANNEL_COUNT (16)
 struct audio_mixer_s {
    // Music
    SDL_AudioDeviceID music_device_id;
    SDL_AudioStream * music_stream;
    int music_loop_wav_id;
+   // SFX
+   SDL_AudioDeviceID sfx_device_id;
+   SDL_AudioStream * sfx_streams[AUDIO_MIXER_SFX_CHANNEL_COUNT];
    // WAVs
    int wav_count;
    struct audio_mixer_wav_s wavs[AUDIO_MIXER_MAX_WAV_COUNT];
@@ -1939,6 +1943,7 @@ void * help_audio_mixer_destroy(struct audio_mixer_s * instance)
 {
    if (instance)
    {
+      // TODO-GS: Cleanup instance !
       // Unbind audio streams
       SDL_UnbindAudioStream(instance->music_stream);
 
@@ -1969,6 +1974,12 @@ struct audio_mixer_s * help_audio_mixer_create(void)
    instance->music_device_id = 0;
    instance->music_stream = NULL;
    instance->music_loop_wav_id = AUDIO_MIXER_WAV_ID_INVALID;
+   // >> SFX
+   instance->sfx_device_id = 0;
+   for (int isfx = 0; isfx < AUDIO_MIXER_SFX_CHANNEL_COUNT; ++isfx)
+   {
+      instance->sfx_streams[isfx] = NULL;
+   }
    // >> WAVs
    instance->wav_count = 0;
 
@@ -1980,6 +1991,13 @@ struct audio_mixer_s * help_audio_mixer_create(void)
       printf("\nFailed to open music audio device - Error: %s", SDL_GetError());
       return help_audio_mixer_destroy(instance);
    }
+   // >> SFX
+   instance->sfx_device_id = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
+   if (0 == instance->sfx_device_id)
+   {
+      printf("\nFailed to open sfx audio device - Error: %s", SDL_GetError());
+      return help_audio_mixer_destroy(instance);
+   }
 
    // Retrieve device specs
    // >> Music
@@ -1987,6 +2005,13 @@ struct audio_mixer_s * help_audio_mixer_create(void)
    if (!SDL_GetAudioDeviceFormat(instance->music_device_id, &music_device_spec, NULL))
    {
       printf("\nFailed to retrieve music device spec - Error: %s", SDL_GetError());
+      return help_audio_mixer_destroy(instance);
+   }
+   // >> SFX
+   SDL_AudioSpec sfx_device_spec;
+   if (!SDL_GetAudioDeviceFormat(instance->sfx_device_id, &sfx_device_spec, NULL))
+   {
+      printf("\nFailed to retrieve sfx device spec - Error: %s", SDL_GetError());
       return help_audio_mixer_destroy(instance);
    }
 
@@ -1998,12 +2023,28 @@ struct audio_mixer_s * help_audio_mixer_create(void)
       printf("\nFailed to create music stream - Error: %s", SDL_GetError());
       return help_audio_mixer_destroy(instance);
    }
+   // >> SFX
+   for (int isfx = 0; isfx < AUDIO_MIXER_SFX_CHANNEL_COUNT; ++isfx)
+   {
+      instance->sfx_streams[isfx] = SDL_CreateAudioStream(NULL, &sfx_device_spec);
+      if (NULL == instance->sfx_streams[isfx])
+      {
+         printf("\nFailed to create sfx stream %d / %d - Error: %s", isfx + 1, AUDIO_MIXER_SFX_CHANNEL_COUNT, SDL_GetError());
+         return help_audio_mixer_destroy(instance);
+      }  
+   }
 
    // Bind streams to device
    // >> Music
    if (!SDL_BindAudioStream(instance->music_device_id, instance->music_stream))
    {
       printf("\nFailed to bind music stream to music device - Error: %s", SDL_GetError());
+      return help_audio_mixer_destroy(instance);
+   }
+   // >> SFX
+   if (!SDL_BindAudioStreams(instance->sfx_device_id, instance->sfx_streams, AUDIO_MIXER_SFX_CHANNEL_COUNT))
+   {
+      printf("\nFailed to bind sfx streams to sfx device - Error: %s", SDL_GetError());
       return help_audio_mixer_destroy(instance);
    }
 
@@ -2019,10 +2060,23 @@ struct audio_mixer_s * help_audio_mixer_create(void)
       printf("\nFailed to set music gain - Error: %s", SDL_GetError());
       return help_audio_mixer_destroy(instance);
    }
+   // >> SFX
+   if (!SDL_PauseAudioDevice(instance->sfx_device_id))
+   {
+      printf("\nFailed to pause sfx device - Error: %s", SDL_GetError());
+      return help_audio_mixer_destroy(instance);
+   }
+   if (!SDL_SetAudioDeviceGain(instance->sfx_device_id, 1.0f))
+   {
+      printf("\nFailed to set sfx gain - Error: %s", SDL_GetError());
+      return help_audio_mixer_destroy(instance);
+   }
 
    // Log device status
    printf("\nMusic device paused: %s", SDL_AudioDevicePaused(instance->music_device_id) ? "Yes" : "No");
    printf("\nMusic device gain  : %f", SDL_GetAudioDeviceGain(instance->music_device_id));
+   printf("\nSFX device paused  : %s", SDL_AudioDevicePaused(instance->sfx_device_id) ? "Yes" : "No");
+   printf("\nSFX device gain    : %f", SDL_GetAudioDeviceGain(instance->sfx_device_id));
 
    // Success
    return instance;
@@ -2072,9 +2126,65 @@ bool help_audio_mixer_play_music(struct audio_mixer_s * instance, int wav_id, bo
       printf("\nFailed to put WAV with id [%d] into music stream data - Error: %s", wav_id, SDL_GetError());
       return false;
    }
-
    // Looping
    instance->music_loop_wav_id = loop ? wav_id : AUDIO_MIXER_WAV_ID_INVALID;
+
+   // Success
+   return true;
+}
+
+bool help_audio_mixer_play_sfx(struct audio_mixer_s * instance, int wav_id)
+{
+   if (help_audio_mixer_wav_id_in_valid(instance, wav_id))
+   {
+      printf("\nFailed to play wav id [%d] as sfx - Invalid ID", wav_id);
+      return false;
+   }
+
+   // Retrieve WAV
+   const struct audio_mixer_wav_s * const WAV = instance->wavs + wav_id;
+
+   // Find a free audio stream slot to play the sfx over
+   SDL_AudioStream * available_sfx_stream = NULL;
+   int isfx;
+   for (isfx = 0; isfx < AUDIO_MIXER_SFX_CHANNEL_COUNT; ++isfx)
+   {
+      SDL_AudioStream * const sfx_stream_candidate = instance->sfx_streams[isfx];
+      const int CANDIDATE_BYTES_AVAILABLE = SDL_GetAudioStreamAvailable(sfx_stream_candidate);
+      if (-1 == CANDIDATE_BYTES_AVAILABLE)
+      {
+         printf("\nSFX stream %d / %d is not available - Error: %s", isfx + 1, AUDIO_MIXER_SFX_CHANNEL_COUNT, SDL_GetError());
+         continue;
+      }
+
+      const bool CANDIDATE_STREAM_USABLE = (0 == CANDIDATE_BYTES_AVAILABLE);
+      if (CANDIDATE_STREAM_USABLE)
+      {
+         available_sfx_stream = sfx_stream_candidate;
+         break;
+      }
+   }
+
+   // Any sfx stream available ?
+   if (NULL == available_sfx_stream)
+   {
+      printf("\nFailed to find available sfx stream on %d channels", AUDIO_MIXER_SFX_CHANNEL_COUNT);
+      return false;
+   }
+
+   // Set sfx device format i.e. spec for this wav
+   if (!SDL_SetAudioStreamFormat(available_sfx_stream, &WAV->spec, NULL))
+   {
+      printf("\nFailed to set sfx stream source format for WAV id [%d] on sfx channel %d - Error: %s", wav_id, isfx + 1, SDL_GetError());
+      return false;
+   }
+
+   // Queue WAV to be played on sfx device that currently contains no data to play
+   if (!SDL_PutAudioStreamData(available_sfx_stream, WAV->data, WAV->length))
+   {
+      printf("\nFailed to put WAV with id [%d] into sfx channel %d - Error: %s", wav_id, isfx + 1, SDL_GetError());
+      return false;
+   }
 
    // Success
    return true;
@@ -2120,14 +2230,71 @@ bool help_audio_mixer_stop_music(struct audio_mixer_s * instance)
    return true;
 }
 
+bool help_audio_mixer_stop_sfx(struct audio_mixer_s * instance)
+{
+   if (NULL == instance) return false;
+
+   // Clear any music in all streams
+   bool success = true;
+   for (int isfx = 0; isfx < AUDIO_MIXER_SFX_CHANNEL_COUNT; ++isfx)
+   {
+      if (!SDL_ClearAudioStream(instance->sfx_streams[isfx]))
+      {
+         printf("\nFailed to clear sfx audio stream %d / %d for stopping - Error: %s", isfx, AUDIO_MIXER_SFX_CHANNEL_COUNT, SDL_GetError());
+         success = false;
+      }
+   }
+
+   // Success
+   return success;
+}
+
 bool help_audio_mixer_resume_music(struct audio_mixer_s * instance)
 {
-   return SDL_ResumeAudioDevice(instance->music_device_id);
+   const bool SUCCESS = SDL_ResumeAudioDevice(instance->music_device_id);
+
+   if (!SUCCESS)
+   {
+      printf("\nFailed to resume music - Error: %s", SDL_GetError());
+   }
+
+   return SUCCESS;
+}
+
+bool help_audio_mixer_resume_sfx(struct audio_mixer_s * instance)
+{
+   const bool SUCCESS = SDL_ResumeAudioDevice(instance->sfx_device_id);
+
+   if (!SUCCESS)
+   {
+      printf("\nFailed to resume sfx - Error: %s", SDL_GetError());
+   }
+
+   return SUCCESS;
 }
 
 bool help_audio_mixer_pause_music(struct audio_mixer_s * instance)
 {
-   return SDL_PauseAudioDevice(instance->music_device_id);
+   const bool SUCCESS = SDL_PauseAudioDevice(instance->music_device_id);
+
+   if (!SUCCESS)
+   {
+      printf("\nFailed to pause music - Error: %s", SDL_GetError());
+   }
+
+   return SUCCESS;
+}
+
+bool help_audio_mixer_pause_sfx(struct audio_mixer_s * instance)
+{
+   const bool SUCCESS = SDL_PauseAudioDevice(instance->sfx_device_id);
+
+   if (!SUCCESS)
+   {
+      printf("\nFailed to pause sfx - Error: %s", SDL_GetError());
+   }
+
+   return SUCCESS;
 }
 
 float help_audio_mixer_clamp_f(float floor, float value, float ceiling)
@@ -2154,6 +2321,11 @@ float help_audio_mixer_clamp_volume(float volume)
 bool help_audio_mixer_set_music_volume(struct audio_mixer_s * instance, float new_volume)
 {
    return SDL_SetAudioDeviceGain(instance->music_device_id, help_audio_mixer_clamp_volume(new_volume));
+}
+
+bool help_audio_mixer_set_sfx_volume(struct audio_mixer_s * instance, float new_volume)
+{
+   return SDL_SetAudioDeviceGain(instance->sfx_device_id, help_audio_mixer_clamp_volume(new_volume));
 }
 
 // Logic - Main
@@ -2390,15 +2562,28 @@ int main(int argc, char * argv[])
       return EXIT_FAILURE;
    }
    // >> WAV paths
-   char str_path_wav_effect[1024];
-   char str_path_wav_music[1024];
-   snprintf(str_path_wav_effect, sizeof(str_path_wav_effect), "%s\\audio\\%s\\%s", DIR_ABS_RES, "effects", "storm.wav");
-   snprintf(str_path_wav_music, sizeof(str_path_wav_music), "%s\\audio\\%s\\%s", DIR_ABS_RES, "music", "beats-loop.wav");
+   char str_path_wav[1024];
    // >> Register WAVs
-   const int AMWID_EFFECT = help_audio_mixer_register_wav(audio_mixer, str_path_wav_effect);
-   const int AMWID_MUSIC = help_audio_mixer_register_wav(audio_mixer, str_path_wav_music);
-   help_audio_mixer_play_music(audio_mixer, AMWID_MUSIC, false);
+   snprintf(str_path_wav, sizeof(str_path_wav), "%s\\audio\\%s\\%s.wav", DIR_ABS_RES, "effects", "confirm");
+   const int AMWID_SFX_CONFIRM = help_audio_mixer_register_wav(audio_mixer, str_path_wav);
+   snprintf(str_path_wav, sizeof(str_path_wav), "%s\\audio\\%s\\%s.wav", DIR_ABS_RES, "effects", "jump");
+   const int AMWID_SFX_JUMP = help_audio_mixer_register_wav(audio_mixer, str_path_wav);
+   snprintf(str_path_wav, sizeof(str_path_wav), "%s\\audio\\%s\\%s.wav", DIR_ABS_RES, "effects", "pause");
+   const int AMWID_SFX_PAUSE = help_audio_mixer_register_wav(audio_mixer, str_path_wav);
+   snprintf(str_path_wav, sizeof(str_path_wav), "%s\\audio\\%s\\%s.wav", DIR_ABS_RES, "effects", "select");
+   const int AMWID_SFX_SELECT = help_audio_mixer_register_wav(audio_mixer, str_path_wav);
+   snprintf(str_path_wav, sizeof(str_path_wav), "%s\\audio\\%s\\%s.wav", DIR_ABS_RES, "effects", "shoot");
+   const int AMWID_SFX_SHOOT = help_audio_mixer_register_wav(audio_mixer, str_path_wav);
+   snprintf(str_path_wav, sizeof(str_path_wav), "%s\\audio\\%s\\%s.wav", DIR_ABS_RES, "effects", "step");
+   const int AMWID_SFX_STEP = help_audio_mixer_register_wav(audio_mixer, str_path_wav);
+   snprintf(str_path_wav, sizeof(str_path_wav), "%s\\audio\\%s\\%s.wav", DIR_ABS_RES, "music", "soft");
+   const int AMWID_MUSIC_SOFT = help_audio_mixer_register_wav(audio_mixer, str_path_wav);
+   // >> Configure
    help_audio_mixer_resume_music(audio_mixer);
+   help_audio_mixer_resume_sfx(audio_mixer);
+   // >> Play stuff
+   //help_audio_mixer_play_music(audio_mixer, AMWID_MUSIC_SOFT, false);
+   //help_audio_mixer_resume_sfx(audio_mixer);
 
    // Package engine components
    struct engine_s engine;
@@ -2466,28 +2651,31 @@ int main(int argc, char * argv[])
       while (fixed_delta_time_accumulator >= FIXED_DELTA_TIME)
       {
          // Update music
-         help_audio_mixer_loop_music(audio_mixer);
+         //help_audio_mixer_loop_music(audio_mixer);
 
          // Update input state
          help_input_determine_intermediate_state(input);
 
+         // TODO-GS: Test audio stuff
+         //printf("\n\t[-%3d] Bytes available: %d", 0, SDL_GetAudioStreamAvailable(audio_mixer->sfx_streams[0]));
+         help_audio_mixer_set_music_volume(audio_mixer, 1.0f);
+         help_audio_mixer_set_sfx_volume(audio_mixer, 1.0f);
+         printf("\nMusic: %-2d (%-10d) SFX: %-2d (%-10d)",
+            SDL_AudioDevicePaused(audio_mixer->music_device_id),
+            SDL_GetAudioStreamAvailable(audio_mixer->music_stream),
+            SDL_AudioDevicePaused(audio_mixer->sfx_device_id),
+            SDL_GetAudioStreamAvailable(audio_mixer->sfx_streams[0])
+         );
+
+         if (help_input_key_pressed(input, CUSTOM_KEY_A))
+         {
+            help_audio_mixer_play_music(audio_mixer, AMWID_MUSIC_SOFT, true);
+            SDL_FlushAudioStream(audio_mixer->music_stream);
+         }
+
          // Tick housekeeping
          time_simulated += FIXED_DELTA_TIME;
          fixed_delta_time_accumulator -= FIXED_DELTA_TIME;
-
-         // TODO-GS: Audio testing
-         if (help_input_key_pressed(input, CUSTOM_KEY_A))
-         {
-            help_audio_mixer_play_music(audio_mixer, AMWID_MUSIC, false);
-         }
-         if (help_input_key_pressed(input, CUSTOM_KEY_B))
-         {
-            help_audio_mixer_play_music(audio_mixer, AMWID_MUSIC, true);
-         }
-         if (help_input_key_pressed(input, CUSTOM_KEY_SELECT))
-         {
-            help_audio_mixer_stop_music(audio_mixer);
-         }
 
          // Tick based on game state
          if (GAME_STATE_NEW_GAME == game_state)
