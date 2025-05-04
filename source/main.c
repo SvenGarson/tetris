@@ -1892,6 +1892,7 @@ struct audio_mixer_s {
    // Music
    SDL_AudioDeviceID music_device_id;
    SDL_AudioStream * music_stream;
+   int music_loop_wav_id;
    // WAVs
    int wav_count;
    struct audio_mixer_wav_s wavs[AUDIO_MIXER_MAX_WAV_COUNT];
@@ -1967,6 +1968,7 @@ struct audio_mixer_s * help_audio_mixer_create(void)
    // >> Music
    instance->music_device_id = 0;
    instance->music_stream = NULL;
+   instance->music_loop_wav_id = AUDIO_MIXER_WAV_ID_INVALID;
    // >> WAVs
    instance->wav_count = 0;
 
@@ -2035,12 +2037,22 @@ bool help_audio_mixer_wav_id_in_valid(struct audio_mixer_s * instance, int wav_i
    ) ? true : false;
 }
 
-bool help_audio_mixer_play_music(struct audio_mixer_s * instance, int wav_id)
+bool help_audio_mixer_play_music(struct audio_mixer_s * instance, int wav_id, bool loop)
 {
    if (help_audio_mixer_wav_id_in_valid(instance, wav_id))
    {
       printf("\nFailed to play wav id [%d] as music - Invalid ID", wav_id);
       return false;
+   }
+
+   const bool REPLACE_ACTIVE_MUSIC = true;
+   if (REPLACE_ACTIVE_MUSIC)
+   {
+      if (!SDL_ClearAudioStream(instance->music_stream))
+      {
+         printf("\nFailed to clear music audio stream for wav id [%d] - Error: %s", wav_id, SDL_GetError());
+         return false;
+      }
    }
 
    // Retrieve WAV
@@ -2054,11 +2066,55 @@ bool help_audio_mixer_play_music(struct audio_mixer_s * instance, int wav_id)
    }
 
    // Queue WAV to be played on music device
+   // Queued at the start is stream is cleared, qeued later if the stream is not cleared
    if (!SDL_PutAudioStreamData(instance->music_stream, WAV->data, WAV->length))
    {
       printf("\nFailed to put WAV with id [%d] into music stream data - Error: %s", wav_id, SDL_GetError());
       return false;
    }
+
+   // Looping
+   instance->music_loop_wav_id = loop ? wav_id : AUDIO_MIXER_WAV_ID_INVALID;
+
+   // Success
+   return true;
+}
+
+bool help_audio_mixer_loop_music(struct audio_mixer_s * instance)
+{
+   if (NULL == instance || help_audio_mixer_wav_id_in_valid(instance, instance->music_loop_wav_id)) return false;
+
+   // TODO-GS: This approach causes noticeable holes in the looped music
+   const int MUSIC_BYTES_AVAILABLE = SDL_GetAudioStreamAvailable(instance->music_stream);
+   if (-1 == MUSIC_BYTES_AVAILABLE)
+   {
+      printf("\nFailed to get available data on music stream for looping - Error: %s", SDL_GetError());
+      return false;
+   }
+
+   // Keep looping when all music bytes consumed by audio stream
+   if (0 == MUSIC_BYTES_AVAILABLE)
+   {
+      help_audio_mixer_play_music(instance, instance->music_loop_wav_id, true);
+   }
+
+   // Success
+   return true;
+}
+
+bool help_audio_mixer_stop_music(struct audio_mixer_s * instance)
+{
+   if (NULL == instance) return false;
+
+   // Clear any music in stream
+   if (!SDL_ClearAudioStream(instance->music_stream))
+   {
+      printf("\nFailed to clear music audio stream for stopping - Error: %s", SDL_GetError());
+      return false;
+   }
+
+   // Stop looping
+   instance->music_loop_wav_id = AUDIO_MIXER_WAV_ID_INVALID;
 
    // Success
    return true;
@@ -2072,6 +2128,32 @@ bool help_audio_mixer_resume_music(struct audio_mixer_s * instance)
 bool help_audio_mixer_pause_music(struct audio_mixer_s * instance)
 {
    return SDL_PauseAudioDevice(instance->music_device_id);
+}
+
+float help_audio_mixer_clamp_f(float floor, float value, float ceiling)
+{
+   if (value < floor)
+   {
+      return floor;
+   }
+   else if (value > ceiling)
+   {
+      return ceiling;
+   }
+   else
+   {
+      return value;
+   }
+}
+
+float help_audio_mixer_clamp_volume(float volume)
+{
+   return help_audio_mixer_clamp_f(0.0f, volume, 1.0f);
+}
+
+bool help_audio_mixer_set_music_volume(struct audio_mixer_s * instance, float new_volume)
+{
+   return SDL_SetAudioDeviceGain(instance->music_device_id, help_audio_mixer_clamp_volume(new_volume));
 }
 
 // Logic - Main
@@ -2311,11 +2393,11 @@ int main(int argc, char * argv[])
    char str_path_wav_effect[1024];
    char str_path_wav_music[1024];
    snprintf(str_path_wav_effect, sizeof(str_path_wav_effect), "%s\\audio\\%s\\%s", DIR_ABS_RES, "effects", "storm.wav");
-   snprintf(str_path_wav_music, sizeof(str_path_wav_music), "%s\\audio\\%s\\%s", DIR_ABS_RES, "music", "smoky-funk.wav");
+   snprintf(str_path_wav_music, sizeof(str_path_wav_music), "%s\\audio\\%s\\%s", DIR_ABS_RES, "music", "beats-loop.wav");
    // >> Register WAVs
    const int AMWID_EFFECT = help_audio_mixer_register_wav(audio_mixer, str_path_wav_effect);
    const int AMWID_MUSIC = help_audio_mixer_register_wav(audio_mixer, str_path_wav_music);
-   help_audio_mixer_play_music(audio_mixer, AMWID_MUSIC);
+   help_audio_mixer_play_music(audio_mixer, AMWID_MUSIC, false);
    help_audio_mixer_resume_music(audio_mixer);
 
    // Package engine components
@@ -2383,6 +2465,9 @@ int main(int argc, char * argv[])
       // Iterative fixed time step integration
       while (fixed_delta_time_accumulator >= FIXED_DELTA_TIME)
       {
+         // Update music
+         help_audio_mixer_loop_music(audio_mixer);
+
          // Update input state
          help_input_determine_intermediate_state(input);
 
@@ -2391,13 +2476,22 @@ int main(int argc, char * argv[])
          fixed_delta_time_accumulator -= FIXED_DELTA_TIME;
 
          // TODO-GS: Audio testing
-         if (help_input_key_pressed(input, CUSTOM_KEY_A)) help_audio_mixer_resume_music(audio_mixer);
-         if (help_input_key_pressed(input, CUSTOM_KEY_B)) help_audio_mixer_pause_music(audio_mixer);
+         if (help_input_key_pressed(input, CUSTOM_KEY_A))
+         {
+            help_audio_mixer_play_music(audio_mixer, AMWID_MUSIC, false);
+         }
+         if (help_input_key_pressed(input, CUSTOM_KEY_B))
+         {
+            help_audio_mixer_play_music(audio_mixer, AMWID_MUSIC, true);
+         }
+         if (help_input_key_pressed(input, CUSTOM_KEY_SELECT))
+         {
+            help_audio_mixer_stop_music(audio_mixer);
+         }
 
          // Tick based on game state
          if (GAME_STATE_NEW_GAME == game_state)
          {
-            // Restart stats
             stat_score = 0;
             stat_lines = 0;
             stat_level = 0;

@@ -15,37 +15,15 @@
 # Audio stuff
 > Interface
    > Setup
-      - play sound effect
-      - play music
       - destroy instance + cleanup
    > Controls
-      > music
-         - volume
-         - resume
-         - pause
-         - stop / kill / clear
-         - looping
       > sfx
          - volume (all channels)
          - resume (all channels)
          - pause (all channels)
          - stop / kill / clear (all channels)
-   > Specifics
-      - single music channel
-      - N concurrent sfc channels
-      - set type of WAV per PUT operation
-   > Realizations
-      - registration for WAV to ID (valid and invalid) -> WAV can be used for music or SFX
-   > Functions to check out
-      - SDL_GetAudioStreamAvailable
-      - SDL_FlushAudioStream
-      - Flush
    > Problems
-      - pause / resume
-      - volume
-      - not enough data -> need to flush
-      - mismatching specs
-      - filling into buffer when buffer not empty -> growing + sequential playback !?
+      - flushing required ?
 
 # Audio usage
 
