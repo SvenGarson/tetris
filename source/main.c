@@ -1880,6 +1880,200 @@ struct score_level_mapping_s score_level_mapping_make(int threshold_score, int m
    return mapping;
 }
 
+// Helpers - Audio
+struct audio_mixer_wav_s {
+   SDL_AudioSpec spec;
+   Uint8 * data;
+   Uint32 length;
+};
+
+#define AUDIO_MIXER_MAX_WAV_COUNT (3)
+struct audio_mixer_s {
+   // Music
+   SDL_AudioDeviceID music_device_id;
+   SDL_AudioStream * music_stream;
+   // WAVs
+   int wav_count;
+   struct audio_mixer_wav_s wavs[AUDIO_MIXER_MAX_WAV_COUNT];
+};
+
+const int AUDIO_MIXER_WAV_ID_INVALID = -1;
+
+bool help_audio_mixer_wavs_full(struct audio_mixer_s * instance)
+{
+   return (
+      NULL == instance ||
+      instance->wav_count >= AUDIO_MIXER_MAX_WAV_COUNT
+   ) ? true : false;
+}
+
+int help_audio_mixer_register_wav(struct audio_mixer_s * instance, const char * path)
+{
+   if (NULL == instance || NULL == path) return AUDIO_MIXER_WAV_ID_INVALID;
+
+   if (help_audio_mixer_wavs_full(instance))
+   {
+      printf("\nFailed to register WAV at [%s] because all [%d] slots are taken", path, AUDIO_MIXER_MAX_WAV_COUNT);
+      return AUDIO_MIXER_WAV_ID_INVALID;
+   }
+
+   struct audio_mixer_wav_s new_wav;
+   if (SDL_LoadWAV(path, &new_wav.spec, &new_wav.data, &new_wav.length))
+   {
+      // Loaded WAV successfully
+      const int WAV_ID = instance->wav_count++;
+      instance->wavs[WAV_ID] = new_wav;
+      printf("\nSuccesfully loaded wav [%s] with id [%d]", path, WAV_ID);
+      return WAV_ID;
+   }
+   else
+   {
+      // Failed to load WAV
+      printf("\nFailed to load WAV [%s] - Error: %s", path, SDL_GetError());
+      return AUDIO_MIXER_WAV_ID_INVALID;
+   }
+}
+
+void * help_audio_mixer_destroy(struct audio_mixer_s * instance)
+{
+   if (instance)
+   {
+      // Unbind audio streams
+      SDL_UnbindAudioStream(instance->music_stream);
+
+      // Streams
+      SDL_DestroyAudioStream(instance->music_stream);
+
+      // Devices
+      SDL_CloseAudioDevice(instance->music_device_id);
+
+      // Instance
+      free(instance);
+   }
+
+   return NULL;
+}
+
+struct audio_mixer_s * help_audio_mixer_create(void)
+{
+   struct audio_mixer_s * instance = malloc(sizeof(struct audio_mixer_s));
+   if (NULL == instance)
+   {
+      printf("\nFailed to allocate audio mixer instance");
+      return help_audio_mixer_destroy(instance);
+   }
+
+   // Zero instance
+   // >> Music
+   instance->music_device_id = 0;
+   instance->music_stream = NULL;
+   // >> WAVs
+   instance->wav_count = 0;
+
+   // Open devices
+   // >> Music
+   instance->music_device_id = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
+   if (0 == instance->music_device_id)
+   {
+      printf("\nFailed to open music audio device - Error: %s", SDL_GetError());
+      return help_audio_mixer_destroy(instance);
+   }
+
+   // Retrieve device specs
+   // >> Music
+   SDL_AudioSpec music_device_spec;
+   if (!SDL_GetAudioDeviceFormat(instance->music_device_id, &music_device_spec, NULL))
+   {
+      printf("\nFailed to retrieve music device spec - Error: %s", SDL_GetError());
+      return help_audio_mixer_destroy(instance);
+   }
+
+   // Create audio streams
+   // >> Music
+   instance->music_stream = SDL_CreateAudioStream(NULL, &music_device_spec);
+   if (NULL == instance->music_stream)
+   {
+      printf("\nFailed to create music stream - Error: %s", SDL_GetError());
+      return help_audio_mixer_destroy(instance);
+   }
+
+   // Bind streams to device
+   // >> Music
+   if (!SDL_BindAudioStream(instance->music_device_id, instance->music_stream))
+   {
+      printf("\nFailed to bind music stream to music device - Error: %s", SDL_GetError());
+      return help_audio_mixer_destroy(instance);
+   }
+
+   // Configure devices
+   // >> Music
+   if (!SDL_PauseAudioDevice(instance->music_device_id))
+   {
+      printf("\nFailed to pause music device - Error: %s", SDL_GetError());
+      return help_audio_mixer_destroy(instance);
+   }
+   if (!SDL_SetAudioDeviceGain(instance->music_device_id, 1.0f))
+   {
+      printf("\nFailed to set music gain - Error: %s", SDL_GetError());
+      return help_audio_mixer_destroy(instance);
+   }
+
+   // Log device status
+   printf("\nMusic device paused: %s", SDL_AudioDevicePaused(instance->music_device_id) ? "Yes" : "No");
+   printf("\nMusic device gain  : %f", SDL_GetAudioDeviceGain(instance->music_device_id));
+
+   // Success
+   return instance;
+}
+
+bool help_audio_mixer_wav_id_in_valid(struct audio_mixer_s * instance, int wav_id)
+{
+   return (
+      NULL == instance ||
+      wav_id < 0 ||
+      wav_id >= AUDIO_MIXER_MAX_WAV_COUNT
+   ) ? true : false;
+}
+
+bool help_audio_mixer_play_music(struct audio_mixer_s * instance, int wav_id)
+{
+   if (help_audio_mixer_wav_id_in_valid(instance, wav_id))
+   {
+      printf("\nFailed to play wav id [%d] as music - Invalid ID", wav_id);
+      return false;
+   }
+
+   // Retrieve WAV
+   const struct audio_mixer_wav_s * const WAV = instance->wavs + wav_id;
+
+   // Set music device format i.e. spec for this wav
+   if (!SDL_SetAudioStreamFormat(instance->music_stream, &WAV->spec, NULL))
+   {
+      printf("\nFailed to set music stream source format for WAV id [%d] - Error: %s", wav_id, SDL_GetError());
+      return false;
+   }
+
+   // Queue WAV to be played on music device
+   if (!SDL_PutAudioStreamData(instance->music_stream, WAV->data, WAV->length))
+   {
+      printf("\nFailed to put WAV with id [%d] into music stream data - Error: %s", wav_id, SDL_GetError());
+      return false;
+   }
+
+   // Success
+   return true;
+}
+
+bool help_audio_mixer_resume_music(struct audio_mixer_s * instance)
+{
+   return SDL_ResumeAudioDevice(instance->music_device_id);
+}
+
+bool help_audio_mixer_pause_music(struct audio_mixer_s * instance)
+{
+   return SDL_PauseAudioDevice(instance->music_device_id);
+}
+
 // Logic - Main
 int main(int argc, char * argv[])
 {
@@ -1892,7 +2086,7 @@ int main(int argc, char * argv[])
    }
 
    // Initialize SDL
-   if (!SDL_Init(SDL_INIT_VIDEO))
+   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
    {
       printf("\nFailed to initialize SDL - Error: %s", SDL_GetError());
       return EXIT_FAILURE;
@@ -2106,6 +2300,24 @@ int main(int argc, char * argv[])
       score_level_mapping_make(180, 9)
    };
 
+   // Audio
+   struct audio_mixer_s * audio_mixer = help_audio_mixer_create();
+   if (NULL == audio_mixer)
+   {
+      printf("\nFailed to create audio mixer");
+      return EXIT_FAILURE;
+   }
+   // >> WAV paths
+   char str_path_wav_effect[1024];
+   char str_path_wav_music[1024];
+   snprintf(str_path_wav_effect, sizeof(str_path_wav_effect), "%s\\audio\\%s\\%s", DIR_ABS_RES, "effects", "storm.wav");
+   snprintf(str_path_wav_music, sizeof(str_path_wav_music), "%s\\audio\\%s\\%s", DIR_ABS_RES, "music", "smoky-funk.wav");
+   // >> Register WAVs
+   const int AMWID_EFFECT = help_audio_mixer_register_wav(audio_mixer, str_path_wav_effect);
+   const int AMWID_MUSIC = help_audio_mixer_register_wav(audio_mixer, str_path_wav_music);
+   help_audio_mixer_play_music(audio_mixer, AMWID_MUSIC);
+   help_audio_mixer_resume_music(audio_mixer);
+
    // Package engine components
    struct engine_s engine;
    engine.tex_virtual = tex_virtual;
@@ -2175,8 +2387,12 @@ int main(int argc, char * argv[])
          help_input_determine_intermediate_state(input);
 
          // Tick housekeeping
-         fixed_delta_time_accumulator -= FIXED_DELTA_TIME;
          time_simulated += FIXED_DELTA_TIME;
+         fixed_delta_time_accumulator -= FIXED_DELTA_TIME;
+
+         // TODO-GS: Audio testing
+         if (help_input_key_pressed(input, CUSTOM_KEY_A)) help_audio_mixer_resume_music(audio_mixer);
+         if (help_input_key_pressed(input, CUSTOM_KEY_B)) help_audio_mixer_pause_music(audio_mixer);
 
          // Tick based on game state
          if (GAME_STATE_NEW_GAME == game_state)
@@ -2366,6 +2582,7 @@ int main(int argc, char * argv[])
          {
             // Action - None - Should never happen
             printf("\nGame state NONE - Nothing to simulate");
+            exit(-1);
          }
 
          // Level detection
@@ -2534,6 +2751,7 @@ int main(int argc, char * argv[])
    }
 
    // Cleanup custom
+   help_audio_mixer_destroy(audio_mixer);
    help_input_destroy(input);
    help_texture_rgba_destroy(tex_virtual);
    help_texture_rgba_destroy(tex_sprites);
