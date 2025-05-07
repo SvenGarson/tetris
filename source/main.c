@@ -2183,7 +2183,7 @@ int main(int argc, char * argv[])
 
    // Audio
    // >> Open audio files
-   struct audio_wav_s WAV =  audio_wav_load(audio_resource_path(DIR_ABS_RES, "music", "storytime", "wav"));
+   struct audio_wav_s WAV =  audio_wav_load(audio_resource_path(DIR_ABS_RES, "effects", "step", "wav"));
    if (WAV.un_usable) exit_with_message("Failed to load WAV", SDL_GetError());
    // Open playback device
    const SDL_AudioDeviceID DEVICE = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);

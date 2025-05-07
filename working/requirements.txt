@@ -1,6 +1,5 @@
 # Current task
 - basic music and sound effects
-- looping of music
 
 # Next tasks
 - the tetro flash thing
@@ -13,45 +12,10 @@
 - pause mode
 
 # Audio stuff
-> Interface
-   > Setup
-      - destroy instance + cleanup
-   > Controls
-      > sfx
-         - volume (all channels)
-         - resume (all channels)
-         - pause (all channels)
-         - stop / kill / clear (all channels)
-   > Problems
-      - flushing required ?
-      - clearing stream pauses it ?
-
-# Audio usage
-
-   > Setup
-
-      audio_s * audio = audio_create(sfx_channel_count)
-      const AID_MUSIC = audio_register_WAV(path)
-      const AID_EFFECT = audio_register_WAV(path)
-
-   > Volume
-
-      audio_volume_music_set(audio, volume) // For single music channel
-      audio_volume_effects_set(audio, volume) // For all sfx channels
-
-   > Playback
-
-      audio_pause_music
-      audio_resume_music
-      audio_kill_music
-
-      audio_pause_effects
-      audio_resume_effects
-      audio_kill_effects
-
-   > Destroy
-
-      audio_destroy(audio)
+- mixing audio samples
+- caching loaded sounds into the same format (SDL_ConvertAudioSamples)
+  or using audio streams directly !
+- 
 
 # Bugs to fix
 - multi-firing of input
