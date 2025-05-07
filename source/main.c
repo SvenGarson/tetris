@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <ctype.h>
+#include <math.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 
@@ -1880,6 +1881,80 @@ struct score_level_mapping_s score_level_mapping_make(int threshold_score, int m
    return mapping;
 }
 
+// Helpers - Audio
+struct audio_wav_s {
+   bool usable;
+   bool un_usable;
+   SDL_AudioSpec spec;
+   Uint8 * data;
+   Uint32 length;
+   int current;
+   char path[2048];
+};
+
+struct audio_wav_s audio_wav_load(const char * path)
+{
+   struct audio_wav_s wav;
+   wav.current = 0;
+
+   const bool SUCCESS = SDL_LoadWAV(path, &wav.spec, &wav.data, &wav.length);
+   snprintf(wav.path, sizeof(wav.path), "%s", path);
+   if (SUCCESS)
+   {
+      printf("\nWAV %#x - %d - %d - %p - %u - from [%s]", wav.spec.format, wav.spec.freq, wav.spec.channels, wav.data, wav.length, path);
+   }
+   wav.usable = SUCCESS;
+   wav.un_usable = !SUCCESS;
+
+   return wav;
+}
+
+const char * audio_resource_path(const char * dir_abs_res, const char * category, const char * filename, const char * extension)
+{
+   static char path[4096];
+   snprintf(path, sizeof(path), "%s\\audio\\%s\\%s.%s", dir_abs_res, category, filename, extension);
+   return path;
+}
+
+void exit_with_message(const char * pre, const char * post)
+{
+   printf("\n[EXIT WITH MESSAGE] %s - %s", pre ? pre : "NA", post ? post : "NA");
+   exit(1);
+}
+
+void log_sdl_spec(SDL_AudioSpec spec, const char * tag)
+{
+   if (NULL == tag) return;
+
+   printf("\nSpec tagged [%s] | Format: %#x Frequency: %-8d Channels: %-2d" ,tag ? tag : "NA", spec.format, spec.freq, spec.channels);
+}
+
+void callback_audio_mix(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
+{
+   if (NULL == userdata) return;
+   struct audio_wav_s * const wav = (struct audio_wav_s * )userdata;
+   
+   // Wav already played ?
+   if (wav->current >= wav->length)
+   {
+      wav->current = 0;
+   }
+
+   // How much data to pass down ?
+   const int WAV_REST_LENGTH = wav->length - wav->current;
+   const int LENGTH_PASSED = SDL_min(WAV_REST_LENGTH, total_amount);
+
+   // Pass audio data to stream
+   printf("\nChunk: %d @ %d", LENGTH_PASSED, wav->current);
+   if (false == SDL_PutAudioStreamData(stream, wav->data + wav->current, LENGTH_PASSED))
+   {
+      printf("\nFailed to put audio data into stream - Error: %s", SDL_GetError());
+   }
+
+   // Consume chunk of the wav
+   wav->current += LENGTH_PASSED;
+}
+
 // Logic - Main
 int main(int argc, char * argv[])
 {
@@ -2106,6 +2181,26 @@ int main(int argc, char * argv[])
       score_level_mapping_make(180, 9)
    };
 
+   // Audio
+   // >> Open audio files
+   struct audio_wav_s WAV =  audio_wav_load(audio_resource_path(DIR_ABS_RES, "music", "storytime", "wav"));
+   if (WAV.un_usable) exit_with_message("Failed to load WAV", SDL_GetError());
+   // Open playback device
+   const SDL_AudioDeviceID DEVICE = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
+   if (0 == DEVICE) exit_with_message("Failed to open playback audio device", SDL_GetError());
+   // Retrieve device spec for playback
+   SDL_AudioSpec device_spec;
+   int device_buffer_size;
+   if (false == SDL_GetAudioDeviceFormat(DEVICE, &device_spec, &device_buffer_size)) exit_with_message("Failed to retrieve playback device format", SDL_GetError());
+   log_sdl_spec(device_spec, "Device");
+   printf("\nDevice buffer size in frames: %d", device_buffer_size);
+   // Associate stream
+   SDL_AudioStream * stream = SDL_CreateAudioStream(&WAV.spec, &device_spec);
+   if (NULL == stream) exit_with_message("\nFail to create playback stream", SDL_GetError());
+   if (false == SDL_BindAudioStream(DEVICE, stream)) exit_with_message("Failed to bind playback stream to palyback device", SDL_GetError());
+   // Set audio data consumption callback
+   if (false == SDL_SetAudioStreamGetCallback(stream, callback_audio_mix, &WAV)) exit_with_message("Failed to setup audio mix callback", SDL_GetError());
+
    // Package engine components
    struct engine_s engine;
    engine.tex_virtual = tex_virtual;
@@ -2128,6 +2223,7 @@ int main(int argc, char * argv[])
    double time_last_tetro_player_drop = help_sdl_time_in_seconds();
    double time_last_removal_flash_timer = help_sdl_time_in_seconds();
    double time_last_row_deletion_timer = help_sdl_time_in_seconds();
+   double time_last_sfx = help_sdl_time_in_seconds();
    // ----> Shared game state data points
    // Shared game state transition data points
    int plot_row_min, plot_row_max;
