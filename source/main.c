@@ -1882,77 +1882,242 @@ struct score_level_mapping_s score_level_mapping_make(int threshold_score, int m
 }
 
 // Helpers - Audio
-struct audio_wav_s {
-   bool usable;
-   bool un_usable;
+typedef int audio_mixer_sample_id_t;
+const audio_mixer_sample_id_t AUDIO_MIXER_SAMPLE_ID_INVALID = -1;
+
+struct sdl_audio_data_s {
    SDL_AudioSpec spec;
    Uint8 * data;
    Uint32 length;
-   int current;
-   char path[2048];
 };
 
-struct audio_wav_s audio_wav_load(const char * path)
+struct audio_mixer_sample_s {
+   struct sdl_audio_data_s * audio;
+   bool active;
+};
+
+#define AUDIO_MIXER_MAX_SAMPLE_STORE_COUNT (64)
+#define AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT (64)
+
+struct audio_mixer_s {
+   // Playback
+   SDL_AudioDeviceID playback_device_id;
+   SDL_AudioStream * playback_stream;
+   // Audio sample source
+   struct sdl_audio_data_s samples_store[AUDIO_MIXER_MAX_SAMPLE_STORE_COUNT];
+   int samples_store_count;
+   // Queued samples
+   struct audio_mixer_sample_s samples_queued[AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT];
+};
+
+void * audio_mixer_destroy(struct audio_mixer_s * instance)
 {
-   struct audio_wav_s wav;
-   wav.current = 0;
-
-   const bool SUCCESS = SDL_LoadWAV(path, &wav.spec, &wav.data, &wav.length);
-   snprintf(wav.path, sizeof(wav.path), "%s", path);
-   if (SUCCESS)
+   if (instance)
    {
-      printf("\nWAV %#x - %d - %d - %p - %u - from [%s]", wav.spec.format, wav.spec.freq, wav.spec.channels, wav.data, wav.length, path);
-   }
-   wav.usable = SUCCESS;
-   wav.un_usable = !SUCCESS;
+      // Unbind device and stream
+      SDL_UnbindAudioStream(instance->playback_stream);
 
-   return wav;
+      // Playback stream
+      SDL_DestroyAudioStream(instance->playback_stream);
+
+      // Playback audio device
+      SDL_CloseAudioDevice(instance->playback_device_id);
+
+      // Instance
+      free(instance);
+   }
+
+   return NULL;
 }
 
-const char * audio_resource_path(const char * dir_abs_res, const char * category, const char * filename, const char * extension)
+struct SDL_AudioSpec audio_mixer_sdl_audio_spec_make_desired(SDL_AudioFormat desired_format, int desired_channels, int desired_frequency)
+{
+   struct SDL_AudioSpec desired_spec;
+
+   desired_spec.format = desired_format;
+   desired_spec.channels = desired_channels;
+   desired_spec.freq = desired_frequency;
+
+   return desired_spec;
+}
+
+void audio_mixer_sdl_audio_spec_log(struct SDL_AudioSpec spec)
+{
+   printf("Format: %#x | Frequency: %d | Channels: %d", spec.format, spec.freq, spec.channels);
+}
+
+struct audio_mixer_s * audio_mixer_create(SDL_AudioStreamCallback mixer_callback, void * user_data)
+{
+   struct audio_mixer_s * instance = malloc(sizeof(struct audio_mixer_s));
+   if (NULL == instance) return NULL;
+
+   // Zero instance
+   instance->playback_device_id = 0;
+   instance->playback_stream = NULL;
+   instance->samples_store_count = 0;
+   for (int i = 0; i < AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT; ++i)
+   {
+      struct audio_mixer_sample_s * sample = instance->samples_queued + i;
+      sample->audio = NULL;
+      sample->active = false;
+   }
+
+   // Open playback audio device
+   instance->playback_device_id = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
+   if (0 == instance->playback_device_id)
+   {
+      printf("\nFailed to open playback audio device - Error: %s", SDL_GetError());
+      return audio_mixer_destroy(instance);
+   }
+
+   // Create playback stream
+   const struct SDL_AudioSpec SPEC_PLAYBACK_STREAM_IN = audio_mixer_sdl_audio_spec_make_desired(SDL_AUDIO_F32, 2, 44100);
+   instance->playback_stream = SDL_CreateAudioStream(&SPEC_PLAYBACK_STREAM_IN, NULL);
+   if (NULL == instance->playback_stream)
+   {
+      printf("\nFailed to create playback stream with desired spec - Error: %s", SDL_GetError());
+      return audio_mixer_destroy(instance);
+   }
+
+   // Bind stream to device
+   if (false == SDL_BindAudioStream(instance->playback_device_id, instance->playback_stream))
+   {
+      printf("\nFailed to bind playback device with playback stream - Error: %s", SDL_GetError());
+      return audio_mixer_destroy(instance);
+   }
+
+   // Set audio stream mixing callback
+   if (false == SDL_SetAudioStreamGetCallback(instance->playback_stream, mixer_callback, user_data))
+   {
+      printf("\nFailed to set audio stream mixing callback - Error: %s", SDL_GetError());
+      return audio_mixer_destroy(instance);
+   }
+
+   // Log audio mixer attributes
+   printf("\nAudio mixer created successfully:");   
+   printf("\n\tPlayback device id  : %u", instance->playback_device_id);
+   printf("\n\tPlayback stream spec: ");
+   audio_mixer_sdl_audio_spec_log(SPEC_PLAYBACK_STREAM_IN);
+
+   // Success
+   return instance;
+}
+
+bool audio_mixer_samples_full(struct audio_mixer_s * instance)
+{
+   return (
+      NULL == instance ||
+      instance->samples_store_count < 0 ||
+      instance->samples_store_count >= AUDIO_MIXER_MAX_SAMPLE_STORE_COUNT
+   ) ? true : false;
+}
+
+audio_mixer_sample_id_t audio_mixer_register_WAV(struct audio_mixer_s * instance, const char * path)
+{
+   if (NULL == instance || NULL == path || audio_mixer_samples_full(instance))
+   {
+      return AUDIO_MIXER_SAMPLE_ID_INVALID;
+   }
+
+   // Load WAV from file
+   struct sdl_audio_data_s wav;
+   if (false == SDL_LoadWAV(path, &wav.spec, &wav.data, &wav.length))
+   {
+      printf("\nFailed to load WAV from path [%s] - Error: %s", path, SDL_GetError());
+      return AUDIO_MIXER_SAMPLE_ID_INVALID;
+   }
+
+   // Convert to floating point samples for custom mixing
+   struct sdl_audio_data_s converted;
+   converted.spec = audio_mixer_sdl_audio_spec_make_desired(SDL_AUDIO_F32, 2, 44100);
+   if (false == SDL_ConvertAudioSamples(&wav.spec, wav.data, wav.length, &converted.spec, &converted.data, &converted.length))
+   {
+      SDL_free(wav.data);
+      printf("\nFailed to convert loaded WAV to F32 samples - Error: %s", SDL_GetError());
+      return AUDIO_MIXER_SAMPLE_ID_INVALID;
+   }
+
+   // Register in samples
+   const int ID = instance->samples_store_count++;
+   instance->samples_store[ID] = converted;
+
+   // Log loaded
+   const int DL = 15;
+   printf("\n\nLoaded WAV [%s]:", path);
+   printf("\n\t%-*s: ", DL, "File spec");
+   audio_mixer_sdl_audio_spec_log(wav.spec);
+   printf("\n\t%-*s: ", DL, "Conversion spec");
+   audio_mixer_sdl_audio_spec_log(converted.spec);
+
+   // Success
+   return ID;
+}
+
+bool audio_mixer_sample_id_in_valid(struct audio_mixer_s * instance, audio_mixer_sample_id_t id)
+{
+   return id <= AUDIO_MIXER_SAMPLE_ID_INVALID;
+}
+
+struct audio_mixer_sample_s * audio_mixer_access_vacant_sample(struct audio_mixer_s * instance)
+{
+   if (NULL == instance) return NULL;
+
+   // TODO-GS: Find a faster solution ?
+   for (int i = 0; i < AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT; ++i)
+   {
+      struct audio_mixer_sample_s * const SAMPLE = instance->samples_queued + i;
+      if (false == SAMPLE->active)
+      {
+         return SAMPLE;
+      }
+   }
+
+   // No vacant sample slot found
+   return NULL;
+}
+
+bool audio_mixer_queue_sfx_sample(struct audio_mixer_s * instance, audio_mixer_sample_id_t id)
+{
+   if (NULL == instance || audio_mixer_sample_id_in_valid(instance, id)) return false;
+
+   // Slot for another concurrent playback sample ?
+   struct audio_mixer_sample_s * sample = audio_mixer_access_vacant_sample(instance);
+   if (NULL == sample){
+      return false;
+   }
+
+   // Update sample
+   sample->audio = instance->samples_store + id;
+
+   // Activate sample
+   sample->active = true;
+
+   // Success ?
+   return sample->active;
+}
+
+const char * audio_mixer_build_res_path(const char * dir_abs_res, const char * category, const char * filename)
 {
    static char path[4096];
-   snprintf(path, sizeof(path), "%s\\audio\\%s\\%s.%s", dir_abs_res, category, filename, extension);
+
+   snprintf(path, sizeof(path), "%s\\audio\\%s\\%s.wav", dir_abs_res, category, filename);
+
    return path;
 }
 
-void exit_with_message(const char * pre, const char * post)
+void audio_mixer_callback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
 {
-   printf("\n[EXIT WITH MESSAGE] %s - %s", pre ? pre : "NA", post ? post : "NA");
-   exit(1);
-}
-
-void log_sdl_spec(SDL_AudioSpec spec, const char * tag)
-{
-   if (NULL == tag) return;
-
-   printf("\nSpec tagged [%s] | Format: %#x Frequency: %-8d Channels: %-2d" ,tag ? tag : "NA", spec.format, spec.freq, spec.channels);
-}
-
-void callback_audio_mix(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
-{
-   if (NULL == userdata) return;
-   struct audio_wav_s * const wav = (struct audio_wav_s * )userdata;
-   
-   // Wav already played ?
-   if (wav->current >= wav->length)
+   // @Warning: Stream and device src/target specs must match
+   const int SAMPLE_COUNT = additional_amount / sizeof(float);
+   float * data = malloc(sizeof(float) * SAMPLE_COUNT);
+   for (int i = 0; i < SAMPLE_COUNT; ++i)
    {
-      wav->current = 0;
+      data[i] = 0;
    }
 
-   // How much data to pass down ?
-   const int WAV_REST_LENGTH = wav->length - wav->current;
-   const int LENGTH_PASSED = SDL_min(WAV_REST_LENGTH, total_amount);
+   SDL_PutAudioStreamData(stream, data, additional_amount);
 
-   // Pass audio data to stream
-   printf("\nChunk: %d @ %d", LENGTH_PASSED, wav->current);
-   if (false == SDL_PutAudioStreamData(stream, wav->data + wav->current, LENGTH_PASSED))
-   {
-      printf("\nFailed to put audio data into stream - Error: %s", SDL_GetError());
-   }
-
-   // Consume chunk of the wav
-   wav->current += LENGTH_PASSED;
+   free(data);
 }
 
 // Logic - Main
@@ -2181,25 +2346,17 @@ int main(int argc, char * argv[])
       score_level_mapping_make(180, 9)
    };
 
-   // Audio
-   // >> Open audio files
-   struct audio_wav_s WAV =  audio_wav_load(audio_resource_path(DIR_ABS_RES, "effects", "step", "wav"));
-   if (WAV.un_usable) exit_with_message("Failed to load WAV", SDL_GetError());
-   // Open playback device
-   const SDL_AudioDeviceID DEVICE = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
-   if (0 == DEVICE) exit_with_message("Failed to open playback audio device", SDL_GetError());
-   // Retrieve device spec for playback
-   SDL_AudioSpec device_spec;
-   int device_buffer_size;
-   if (false == SDL_GetAudioDeviceFormat(DEVICE, &device_spec, &device_buffer_size)) exit_with_message("Failed to retrieve playback device format", SDL_GetError());
-   log_sdl_spec(device_spec, "Device");
-   printf("\nDevice buffer size in frames: %d", device_buffer_size);
-   // Associate stream
-   SDL_AudioStream * stream = SDL_CreateAudioStream(&WAV.spec, &device_spec);
-   if (NULL == stream) exit_with_message("\nFail to create playback stream", SDL_GetError());
-   if (false == SDL_BindAudioStream(DEVICE, stream)) exit_with_message("Failed to bind playback stream to palyback device", SDL_GetError());
-   // Set audio data consumption callback
-   if (false == SDL_SetAudioStreamGetCallback(stream, callback_audio_mix, &WAV)) exit_with_message("Failed to setup audio mix callback", SDL_GetError());
+   // Setup audio mixer
+   struct audio_mixer_s * audio_mixer = audio_mixer_create(audio_mixer_callback, NULL);
+   if (NULL == audio_mixer)
+   {
+      printf("\nFailed to create audio mixer");
+      return EXIT_FAILURE;
+   }
+   // >> Register sounds for playback
+   const audio_mixer_sample_id_t AMSID = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "storytime"));
+   // >> Play stuff
+   printf("\nQueue sample: %s", audio_mixer_queue_sfx_sample(audio_mixer, AMSID) ? "Success" : "Failure");
 
    // Package engine components
    struct engine_s engine;
@@ -2630,6 +2787,7 @@ int main(int argc, char * argv[])
    }
 
    // Cleanup custom
+   audio_mixer_destroy(audio_mixer);
    help_input_destroy(input);
    help_texture_rgba_destroy(tex_virtual);
    help_texture_rgba_destroy(tex_sprites);

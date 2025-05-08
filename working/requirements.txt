@@ -1,5 +1,5 @@
 # Current task
-- basic music and sound effects
+- music and sound effects
 
 # Next tasks
 - the tetro flash thing
@@ -11,11 +11,48 @@
    - pause
 - pause mode
 
+# Usage & Interface
+
+   > Convert samples
+
+   > Music
+   audio_mixer_music_queue(am, AMWID_MUSIC, loop?, override?) // To single channel ! Override ?
+   audio_mixer_music_play(am) // sets music to playing
+   audio_mixer_music_pause(am) // sets music to paused
+   audio_mixer_music_stop(am) // stop and clear that music
+   audio_mixer_music_volume(am, volume) // set volume
+
+   > SFX
+   audio_mixer_sfx_queue(am, AMWID_SFX) // To any free slot
+   audio_mixer_sfx_play(am) // Play all music - Shared !?
+   audio_mixer_sfx_pause(am) // Pause all sfx - Shared !?
+   audio_mixer_sfx_stop(am) // Stop all sfx - Clear from slots
+   audio_mixer_sfx_volume(am, volume) // set volume
+
+   > Cleanup
+   audio_mixer_destroy(am)
+
+# Architecture
+
+   > Setting up audio chain
+   open default playback device with floating
+
+
+   > Loading audio
+
+   > Converting audio
+
+   > Mixing audio in callback
+
+   > Assumptions
+      - Want floating point device may fail ? So convert audio samples to float, and then convert mixed result to the playback device format ?
+
 # Audio stuff
 - mixing audio samples
 - caching loaded sounds into the same format (SDL_ConvertAudioSamples)
   or using audio streams directly !
-- 
+- delta audio putting when more time passed than data given ?
+- mutex for threaded locking 
 
 # Bugs to fix
 - multi-firing of input
