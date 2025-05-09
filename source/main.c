@@ -1006,6 +1006,11 @@ enum sprite_map_tile_e {
    SPRITE_MAP_TILE_FONT_GLYPH_7,
    SPRITE_MAP_TILE_FONT_GLYPH_8,
    SPRITE_MAP_TILE_FONT_GLYPH_9,
+   SPRITE_MAP_TILE_FONT_GLYPH_PERIOD,
+   SPRITE_MAP_TILE_FONT_GLYPH_COLON,
+   SPRITE_MAP_TILE_FONT_GLYPH_HYPHEN,
+   SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_OPEN,
+   SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED,
    SPRITE_MAP_TILE_NA,
    SPRITE_MAP_TILE_COUNT
 };
@@ -1073,6 +1078,8 @@ struct region_2d_s region_2d_s_make(int min_x, int min_y, int width, int height)
 
 // Helpers - FSM
 enum game_state_e {
+   GAME_STATE_SPLASH,
+   GAME_STATE_TITLE,
    GAME_STATE_NEW_GAME,
    GAME_STATE_CONTROL,
    GAME_STATE_PLACE,
@@ -2366,6 +2373,11 @@ bool audio_mixer_stop_sfx(struct audio_mixer_s * instance)
    return true;
 }
 
+bool audio_mixer_stop_music_and_sfx(struct audio_mixer_s * instance)
+{
+   return audio_mixer_stop_music(instance) && audio_mixer_stop_sfx(instance);
+}
+
 // Logic - Main
 int main(int argc, char * argv[])
 {
@@ -2532,6 +2544,11 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_7, 7, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_8, 8, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_9, 9, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PERIOD, 10, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_HYPHEN, 11, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_COLON, 12, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_OPEN, 13, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED, 14, 1);
 
    // Create font render component
    struct font_render_s font_render;
@@ -2578,6 +2595,12 @@ int main(int argc, char * argv[])
    help_font_render_map_ascii_to_sprite(&font_render, '8', SPRITE_MAP_TILE_FONT_GLYPH_8);
    help_font_render_map_ascii_to_sprite(&font_render, '9', SPRITE_MAP_TILE_FONT_GLYPH_9);
 
+   help_font_render_map_ascii_to_sprite(&font_render, '.', SPRITE_MAP_TILE_FONT_GLYPH_PERIOD);
+   help_font_render_map_ascii_to_sprite(&font_render, '-', SPRITE_MAP_TILE_FONT_GLYPH_HYPHEN);
+   help_font_render_map_ascii_to_sprite(&font_render, ',', SPRITE_MAP_TILE_FONT_GLYPH_COLON);
+   help_font_render_map_ascii_to_sprite(&font_render, '(', SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_OPEN);
+   help_font_render_map_ascii_to_sprite(&font_render, ')', SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED);
+
    // Score level mappings
    struct score_level_mapping_s score_level_mapping[] = {
       score_level_mapping_make(0, 0),
@@ -2600,10 +2623,8 @@ int main(int argc, char * argv[])
       return EXIT_FAILURE;
    }
    // >> Register sounds for playback
-   const audio_mixer_sample_id_t AMSID_STORYTIME = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "storytime"));
-   const audio_mixer_sample_id_t AMSID_DREAD = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "dread-short"));
-   const audio_mixer_sample_id_t AMSID_SELECT = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "select"));
-   const audio_mixer_sample_id_t AMSID_STEP = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "step"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_SPLASH = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "splash"));
+   const audio_mixer_sample_id_t AMSID_MUSIC_TITLE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "title"));
 
    // Package engine components
    struct engine_s engine;
@@ -2614,7 +2635,7 @@ int main(int argc, char * argv[])
 
    // Game state
    // ----> Tick state
-   enum game_state_e game_state = GAME_STATE_NEW_GAME;
+   enum game_state_e game_state = GAME_STATE_SPLASH;
    enum game_state_e next_game_state = GAME_STATE_NONE;
    // ----> Playing field
    struct play_field_s play_field = help_play_field_make_non_occupied();
@@ -2622,6 +2643,7 @@ int main(int argc, char * argv[])
    struct tetro_world_s tetro_active = help_tetro_world_make_random_at_spawn();
    struct tetro_world_s tetro_next = help_tetro_world_make_random_at_spawn();
    // ---- Timers
+   double time_splash_start = help_sdl_time_in_seconds();
    double time_last_tetro_drop = help_sdl_time_in_seconds();
    double time_last_tetro_player_move = help_sdl_time_in_seconds();
    double time_last_tetro_player_drop = help_sdl_time_in_seconds();
@@ -2678,39 +2700,42 @@ int main(int argc, char * argv[])
          time_simulated += FIXED_DELTA_TIME;
          fixed_delta_time_accumulator -= FIXED_DELTA_TIME;
 
-         // TODO-GS: Test audio stuff
-         if (help_input_key_pressed(input, CUSTOM_KEY_LEFT))
-         {
-            audio_mixer_queue_sample_sfx(audio_mixer, AMSID_STORYTIME);
-         }
-         if (help_input_key_pressed(input, CUSTOM_KEY_RIGHT))
-         {
-            audio_mixer_queue_sample_music(audio_mixer, AMSID_DREAD, true);
-         }
-         if (help_input_key_pressed(input, CUSTOM_KEY_UP))
-         {
-         }
-         if (help_input_key_pressed(input, CUSTOM_KEY_DOWN))
-         {
-         }
-         if (help_input_key_pressed(input, CUSTOM_KEY_A))
-         {
-            audio_mixer_queue_sample_sfx(audio_mixer, AMSID_SELECT);
-         }
-         if (help_input_key_pressed(input, CUSTOM_KEY_B))
-         {
-            audio_mixer_queue_sample_sfx(audio_mixer, AMSID_STEP);
-         }
-         if (help_input_key_pressed(input, CUSTOM_KEY_START))
-         {
-            audio_mixer_stop_music(audio_mixer);
-         }
-         if (help_input_key_pressed(input, CUSTOM_KEY_SELECT))
-         {
-            audio_mixer_stop_sfx(audio_mixer);
-         }
-
          // Tick based on game state
+         if (GAME_STATE_SPLASH == game_state)
+         {
+            // SFX
+            static bool init_splash = true;
+            if (init_splash)
+            {
+               audio_mixer_stop_music_and_sfx(audio_mixer);
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_SPLASH);
+               init_splash = false;
+            }
+
+            // Wait until game start or press button
+            const float CONTINUE_TIME = 6.0f;
+            const bool CONTINUE_TIME_PASSED = (help_sdl_time_in_seconds() >= (time_splash_start + CONTINUE_TIME));
+
+            if (CONTINUE_TIME_PASSED || help_input_key_pressed(input, CUSTOM_KEY_START))
+            {
+               // To title screen
+               next_game_state = GAME_STATE_TITLE;
+            }
+         }
+         if (GAME_STATE_TITLE == game_state)
+         {
+            // Title screen music
+            static bool init_title = true;
+            if (init_title)
+            {
+               audio_mixer_stop_music_and_sfx(audio_mixer);
+               audio_mixer_queue_sample_music(audio_mixer, AMSID_MUSIC_TITLE, false);
+               init_title = false;
+            }
+
+            // Player count select
+            // TODO-GS: Two-player mode not yet supported -> Gray out for now
+         }
          if (GAME_STATE_NEW_GAME == game_state)
          {
             stat_score = 0;
@@ -2934,6 +2959,20 @@ int main(int argc, char * argv[])
       // ----> Clear offline texture
       const color_rgba_t COL_GBC_LIGHTEST = color_rgba_make_rgba(238, 255, 102, 0xFF);
       help_texture_rgba_clear(engine.tex_virtual, COL_GBC_LIGHTEST);
+      // >> Render based on active game mode
+      if (GAME_STATE_SPLASH == game_state)
+      {
+         const char * const SPLASH_TEXT = "Just another\nunfinished TETRIS\nclone made for the\nlove of coding."
+                                          "\n\nThis, is a work\nof fiction and\nnon-commercial."
+                                          "\n\n\nWait or hit start."
+                                          "\n\n\n\nSven Garson - 2025";
+         help_engine_render_text_at_tile(&engine, SPLASH_TEXT, 1, PLAY_FIELD_HEIGHT - 2);
+      }
+      if (GAME_STATE_TITLE == game_state)
+      {
+
+      }
+      /*
       // ----> Play field
       help_play_field_render_to_texture(&play_field, &engine);
       // ----> Active tetro while not game over
@@ -2993,10 +3032,7 @@ int main(int argc, char * argv[])
       }
       // ----> Stats
       const char * STR_LABEL_SCORE = "SCORE";
-      help_engine_render_text_at_tile(&engine, STR_LABEL_SCORE, 13, PLAY_FIELD_HEIGHT - 2);
-      char str_stat_score[32];
-      snprintf(str_stat_score, sizeof(str_stat_score), "%*d", strlen(STR_LABEL_SCORE), stat_score);
-      help_engine_render_text_at_tile(&engine, str_stat_score, 13, PLAY_FIELD_HEIGHT - 4);
+      
 
       const char * STR_LABEL_LEVEL = "LEVEL";
       help_engine_render_text_at_tile(&engine, STR_LABEL_LEVEL, 13, PLAY_FIELD_HEIGHT - 8);
@@ -3011,6 +3047,7 @@ int main(int argc, char * argv[])
       help_engine_render_text_at_tile(&engine, str_stat_lines, 13, PLAY_FIELD_HEIGHT - 12);
       // ----> Next tetro
       help_tetro_render_to_texture_at_tile_without_position(&tetro_next, &engine, 14, 1);
+      */
 
       // TODO-GS: Timed rendering when VSync off ?
       // Copy offline to online texture

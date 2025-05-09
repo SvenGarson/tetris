@@ -1,14 +1,17 @@
 # Current task
+- add screens, music and sfx to shape out the experience
+- add basic music and sound effects to gameplay
 
 # Next tasks
-- the tetro flash thing
 - add all required screens (splash, music type, game, game over, thx)
+- options and configurations
 > tweak timing and juice
    - bonus on 4x lines removes + blip
    - finish gui mockup (borders, underlines, etc)
    - parameterize game design and events to all 3 stats
    - pause
 - pause mode
+- the tetro flash thing
 
 # Audio stuff
 - mixing audio samples
