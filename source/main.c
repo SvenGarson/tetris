@@ -1881,6 +1881,23 @@ struct score_level_mapping_s score_level_mapping_make(int threshold_score, int m
    return mapping;
 }
 
+// Helpers - Limits
+float help_limit_clamp_f(float floor, float value, float ceiling)
+{
+   if (value < floor)
+   {
+      return floor;
+   }
+   else if (value > ceiling)
+   {
+      return ceiling;
+   }
+   else
+   {
+      return value;
+   }
+}
+
 // Helpers - Audio
 typedef int audio_mixer_sample_id_t;
 const audio_mixer_sample_id_t AUDIO_MIXER_SAMPLE_ID_INVALID = -1;
@@ -1895,6 +1912,8 @@ struct audio_mixer_sample_s {
    struct sdl_audio_data_s * audio;
    bool active;
    Uint32 playback_position;
+   bool is_music;
+   bool loop_music;
 };
 
 #define AUDIO_MIXER_MAX_SAMPLE_STORE_COUNT (64)
@@ -1909,6 +1928,9 @@ struct audio_mixer_s {
    int samples_store_count;
    // Queued samples
    struct audio_mixer_sample_s samples_queued[AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT];
+   // Channel volume
+   float volume_music;
+   float volume_sfx;
 };
 
 void * audio_mixer_destroy(struct audio_mixer_s * instance)
@@ -1962,6 +1984,8 @@ struct audio_mixer_s * audio_mixer_create(SDL_AudioStreamCallback mixer_callback
    instance->playback_device_id = 0;
    instance->playback_stream = NULL;
    instance->samples_store_count = 0;
+   instance->volume_music = 0.75f;
+   instance->volume_sfx = 0.5f;
    for (int i = 0; i < AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT; ++i)
    {
       struct audio_mixer_sample_s * sample = instance->samples_queued + i;
@@ -1994,7 +2018,7 @@ struct audio_mixer_s * audio_mixer_create(SDL_AudioStreamCallback mixer_callback
    }
 
    // Set audio stream mixing callback
-   if (false == SDL_SetAudioStreamGetCallback(instance->playback_stream, mixer_callback, instance->samples_queued))
+   if (false == SDL_SetAudioStreamGetCallback(instance->playback_stream, mixer_callback, instance))
    {
       printf("\nFailed to set audio stream mixing callback - Error: %s", SDL_GetError());
       return audio_mixer_destroy(instance);
@@ -2083,7 +2107,7 @@ struct audio_mixer_sample_s * audio_mixer_access_vacant_sample(struct audio_mixe
    return NULL;
 }
 
-bool audio_mixer_queue_sfx_sample(struct audio_mixer_s * instance, audio_mixer_sample_id_t id)
+bool audio_mixer_queue_sample(struct audio_mixer_s * instance, audio_mixer_sample_id_t id, bool is_music, bool loop_music)
 {
    if (NULL == instance || audio_mixer_sample_id_in_valid(instance, id)) return false;
 
@@ -2096,12 +2120,24 @@ bool audio_mixer_queue_sfx_sample(struct audio_mixer_s * instance, audio_mixer_s
    // Update sample
    sample->audio = instance->samples_store + id;
 
-   // Activate sample
+   // Activate sample and forward required state
    sample->active = true;
    sample->playback_position = 0;
+   sample->is_music = is_music;
+   sample->loop_music = loop_music;
 
    // Success ?
    return sample->active;
+}
+
+bool audio_mixer_queue_sample_music(struct audio_mixer_s * instance, audio_mixer_sample_id_t id, bool loop_music)
+{
+   return audio_mixer_queue_sample(instance, id, true, loop_music);
+}
+
+bool audio_mixer_queue_sample_sfx(struct audio_mixer_s * instance, audio_mixer_sample_id_t id)
+{
+   return audio_mixer_queue_sample(instance, id, false, false);
 }
 
 const char * audio_mixer_build_res_path(const char * dir_abs_res, const char * category, const char * filename)
@@ -2121,7 +2157,7 @@ void audio_mixer_callback(void *userdata, SDL_AudioStream *stream, int additiona
    }
 
    // Access user data
-   struct audio_mixer_sample_s * const samples_queued = (struct audio_mixer_sample_s *)userdata;
+   struct audio_mixer_s * audio_mixer = (struct audio_mixer_s *)userdata;
 
    // Allocate mix buffer
    // @Warning: amounts are int's i.e. can be negative -> int to uint conversion wrapping hazard
@@ -2136,32 +2172,56 @@ void audio_mixer_callback(void *userdata, SDL_AudioStream *stream, int additiona
    // Initialize mix to silence
    memset(float_mix, 0, SAMPLE_BYTES_REQUIRED);
 
+   // Stats
+   int active_sample_count = 0;
+
    // Mix active audio samples
    for (int i_sample = 0; i_sample < AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT; ++i_sample)
    {
       // Skip in-active samples
-      struct audio_mixer_sample_s * const sample = samples_queued + i_sample;
+      struct audio_mixer_sample_s * const sample = audio_mixer->samples_queued + i_sample;
       if (false == sample->active)
       {
          continue;
       }
 
+      // Track stats
+      ++active_sample_count;
+
       // How much sample data to process ?
       const Uint32 SAMPLE_PLAYBACK_BYTES_LEFT = sample->audio->length - sample->playback_position;
       const Uint32 SAMPLE_BYTES_TO_PROCESS = SDL_min(SAMPLE_PLAYBACK_BYTES_LEFT, SAMPLE_BYTES_REQUIRED);
 
+      // Determine channel volume
+      const float SAMPLE_VOLUME = sample->is_music ? audio_mixer->volume_music : audio_mixer->volume_sfx;
+
       // Add up samples
       const Uint32 FLOAT_SAMPLE_MIX_COUNT = SAMPLE_BYTES_TO_PROCESS / sizeof(float);
+      const float * FLOAT_SAMPLE_DATA_PLAYBACK = (float *)(sample->audio->data + sample->playback_position);
       for (Uint32 i_sample_amplitude = 0; i_sample_amplitude < FLOAT_SAMPLE_MIX_COUNT; ++i_sample_amplitude)
       {
-         const float VOLUME = (cos(help_sdl_time_in_seconds()) + 1.0f) * 0.5f;
-         float_mix[i_sample_amplitude] += ((float *)(sample->audio->data + sample->playback_position))[i_sample_amplitude] * VOLUME;
+         float_mix[i_sample_amplitude] += FLOAT_SAMPLE_DATA_PLAYBACK[i_sample_amplitude] * SAMPLE_VOLUME;
       }
-
-      // TODO-GS: Playback reset, looping, and not reading past buffer
 
       // Advance sample playback
       sample->playback_position += SAMPLE_BYTES_TO_PROCESS;
+
+      // Sample played until the end ?
+      if (sample->playback_position >= sample->audio->length)
+      {
+         sample->playback_position = 0;
+
+         if (sample->is_music)
+         {
+            // Music sample
+            sample->active = sample->loop_music;
+         }
+         else
+         {
+            // Sfx sample
+            sample->active = false;
+         }
+      }
    }
 
    // Queue float mix
@@ -2170,8 +2230,60 @@ void audio_mixer_callback(void *userdata, SDL_AudioStream *stream, int additiona
       printf("\nFailed to put audio float mix into stream - Error: %s", SDL_GetError());
    }
 
+   printf("\nActive samples: %d", active_sample_count);
+
    // Cleanup
    free(float_mix);
+}
+
+bool audio_mixer_set_volume_music(struct audio_mixer_s * instance, float new_volume, float * out_new_volume)
+{
+   if (NULL == instance)
+   {
+       return false;
+   }
+
+   instance->volume_music = help_limit_clamp_f(0.0f, new_volume, 1.0f);
+
+   if (out_new_volume)
+   {
+      *out_new_volume = instance->volume_music;
+   }
+
+   return true;
+}
+
+bool audio_mixer_set_volume_sfx(struct audio_mixer_s * instance, float new_volume, float * out_new_volume)
+{
+   if (NULL == instance)
+   {
+       return false;
+   }
+
+   instance->volume_sfx = help_limit_clamp_f(0.0f, new_volume, 1.0f);
+
+   if (out_new_volume)
+   {
+      *out_new_volume = instance->volume_music;
+   }
+
+   return true;
+}
+
+bool audio_mixer_get_volume_music(struct audio_mixer_s * instance, float * out_volume)
+{
+   if (NULL == instance) return false;
+
+   *out_volume = instance->volume_music;
+   return true;
+}
+
+bool audio_mixer_get_volume_sfx(struct audio_mixer_s * instance, float * out_volume)
+{
+   if (NULL == instance) return false;
+
+   *out_volume = instance->volume_sfx;
+   return true;
 }
 
 // Logic - Main
@@ -2408,9 +2520,10 @@ int main(int argc, char * argv[])
       return EXIT_FAILURE;
    }
    // >> Register sounds for playback
-   const audio_mixer_sample_id_t AMSID = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "storytime"));
-   // >> Play stuff
-   printf("\nQueue sample: %s", audio_mixer_queue_sfx_sample(audio_mixer, AMSID) ? "Success" : "Failure");
+   const audio_mixer_sample_id_t AMSID_STORYTIME = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "storytime"));
+   const audio_mixer_sample_id_t AMSID_DREAD = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "dread-short"));
+   const audio_mixer_sample_id_t AMSID_SELECT = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "select"));
+   const audio_mixer_sample_id_t AMSID_STEP = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "step"));
 
    // Package engine components
    struct engine_s engine;
@@ -2484,6 +2597,24 @@ int main(int argc, char * argv[])
          // Tick housekeeping
          time_simulated += FIXED_DELTA_TIME;
          fixed_delta_time_accumulator -= FIXED_DELTA_TIME;
+
+         // TODO-GS: Test audio stuff
+         if (help_input_key_pressed(input, CUSTOM_KEY_LEFT))
+         {
+            audio_mixer_queue_sample_music(audio_mixer, AMSID_DREAD, false);
+         }
+         if (help_input_key_pressed(input, CUSTOM_KEY_RIGHT))
+         {
+            audio_mixer_queue_sample_music(audio_mixer, AMSID_DREAD, true);
+         }
+         if (help_input_key_pressed(input, CUSTOM_KEY_A))
+         {
+            audio_mixer_queue_sample_sfx(audio_mixer, AMSID_SELECT);
+         }
+         if (help_input_key_pressed(input, CUSTOM_KEY_B))
+         {
+            audio_mixer_queue_sample_sfx(audio_mixer, AMSID_STEP);
+         }
 
          // Tick based on game state
          if (GAME_STATE_NEW_GAME == game_state)
