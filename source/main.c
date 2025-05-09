@@ -90,6 +90,11 @@ struct vec_2i_s vec_2i_make_xy(int x, int y)
    return v;
 }
 
+bool vec_2i_equals_xy(struct vec_2i_s v, int x, int y)
+{
+   return (v.x == x && v.y == y);
+}
+
 struct vec_2i_s vec_2i_make_from_scaled(struct vec_2i_s v, int scale)
 {
    return vec_2i_make_xy(
@@ -1011,6 +1016,8 @@ enum sprite_map_tile_e {
    SPRITE_MAP_TILE_FONT_GLYPH_HYPHEN,
    SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_OPEN,
    SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED,
+   SPRITE_MAP_TILE_FONT_COPYRIGHT,
+   SPRITE_MAP_TILE_FONT_ARROW_RIGHT,
    SPRITE_MAP_TILE_NA,
    SPRITE_MAP_TILE_COUNT
 };
@@ -1080,6 +1087,7 @@ struct region_2d_s region_2d_s_make(int min_x, int min_y, int width, int height)
 enum game_state_e {
    GAME_STATE_SPLASH,
    GAME_STATE_TITLE,
+   GAME_STATE_GAME_MUSIC_CONFIG,
    GAME_STATE_NEW_GAME,
    GAME_STATE_CONTROL,
    GAME_STATE_PLACE,
@@ -1147,6 +1155,18 @@ bool help_render_engine_sprite(struct engine_s * engine, int x, int y, enum spri
    );
 }
 
+// Helpers - Play field
+#define PLAY_FIELD_TILE_SIZE (8)
+#define PLAY_FIELD_WIDTH (10)
+#define PLAY_FIELD_HEIGHT (18)
+#define PLAY_FIELD_OFFSET_HORI_TILES (1)
+#define PLAY_FIELD_OFFSET_HORI_PIXELS (PLAY_FIELD_OFFSET_HORI_TILES * PLAY_FIELD_TILE_SIZE)
+
+bool help_render_engine_sprite_at_tile(struct engine_s * engine, int tile_x, int tile_y, enum sprite_map_tile_e tile_type)
+{
+   return help_render_engine_sprite(engine, tile_x * PLAY_FIELD_TILE_SIZE, tile_y * PLAY_FIELD_TILE_SIZE, tile_type);
+}
+
 bool help_render_engine_sprite_tinted(struct engine_s * engine, int x, int y, enum sprite_map_tile_e tile_type, bool do_tint, color_rgba_t tint)
 {
    if (NULL == engine) return false;
@@ -1162,12 +1182,6 @@ bool help_render_engine_sprite_tinted(struct engine_s * engine, int x, int y, en
    );
 }
 
-// Helpers - Play field
-#define PLAY_FIELD_TILE_SIZE (8)
-#define PLAY_FIELD_WIDTH (10)
-#define PLAY_FIELD_HEIGHT (18)
-#define PLAY_FIELD_OFFSET_HORI_TILES (1)
-#define PLAY_FIELD_OFFSET_HORI_PIXELS (PLAY_FIELD_OFFSET_HORI_TILES * PLAY_FIELD_TILE_SIZE)
 struct play_field_s {
    struct play_field_cell_s cells[PLAY_FIELD_WIDTH][PLAY_FIELD_HEIGHT];
 };
@@ -1905,6 +1919,22 @@ float help_limit_clamp_f(float floor, float value, float ceiling)
    }
 }
 
+int help_limit_clamp_i(int floor, int value, int ceiling)
+{
+   if (value < floor)
+   {
+      return floor;
+   }
+   else if (value > ceiling)
+   {
+      return ceiling;
+   }
+   else
+   {
+      return value;
+   }
+}
+
 // Helpers - Audio
 typedef int audio_mixer_sample_id_t;
 const audio_mixer_sample_id_t AUDIO_MIXER_SAMPLE_ID_INVALID = -1;
@@ -2506,7 +2536,7 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_Z, 6, 6);
    // ----> Register play field sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BRICK, 0, 4);
-   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_HIGHLIGHT, 12, 2);   
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_HIGHLIGHT, 12, 5);   
    // ----> Register font rendering sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_A, 0, 0);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_B, 1, 0);
@@ -2549,6 +2579,9 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_COLON, 12, 1);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_OPEN, 13, 1);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED, 14, 1);
+   // >> Register additional sprites
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_COPYRIGHT, 10, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_ARROW_RIGHT, 11, 2);
 
    // Create font render component
    struct font_render_s font_render;
@@ -2623,8 +2656,13 @@ int main(int argc, char * argv[])
       return EXIT_FAILURE;
    }
    // >> Register sounds for playback
-   const audio_mixer_sample_id_t AMSID_EFFECT_SPLASH = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "splash"));
    const audio_mixer_sample_id_t AMSID_MUSIC_TITLE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "title"));
+   const audio_mixer_sample_id_t AMSID_MUSIC_GAME_A_TYPE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "a-type"));
+   const audio_mixer_sample_id_t AMSID_MUSIC_GAME_B_TYPE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "b-type"));
+   const audio_mixer_sample_id_t AMSID_MUSIC_GAME_C_TYPE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "c-type"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_SPLASH = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "splash"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_INVALID = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "invalid"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_SELECT = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "select"));
 
    // Package engine components
    struct engine_s engine;
@@ -2658,6 +2696,11 @@ int main(int argc, char * argv[])
    int stat_score = 0;
    int stat_lines = 0;
    int stat_level = 0;
+   audio_mixer_sample_id_t configured_game_music = AMSID_MUSIC_GAME_A_TYPE;
+   // >> Game type music config
+   const int GAME_MUSIC_TYPE_WIDTH = 2;
+   const int GAME_MUSIC_TYPE_HEIGHT = 2;
+   struct vec_2i_s game_music_cursor = vec_2i_make_xy(0, 0);
 
    // FPS counter
    double last_time_fps = help_sdl_time_in_seconds();
@@ -2729,15 +2772,109 @@ int main(int argc, char * argv[])
             if (init_title)
             {
                audio_mixer_stop_music_and_sfx(audio_mixer);
-               audio_mixer_queue_sample_music(audio_mixer, AMSID_MUSIC_TITLE, false);
+               audio_mixer_queue_sample_music(audio_mixer, AMSID_MUSIC_TITLE, true);
                init_title = false;
             }
 
             // Player count select
-            // TODO-GS: Two-player mode not yet supported -> Gray out for now
+            if (help_input_key_pressed(input, CUSTOM_KEY_LEFT) || help_input_key_pressed(input, CUSTOM_KEY_RIGHT))
+            {
+               // TODO-GS: Two-player mode not yet supported -> Gray out for now
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_INVALID);
+            }
+            if (help_input_key_pressed(input, CUSTOM_KEY_START))
+            {
+               // To game & music type config screen
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_SELECT);
+               next_game_state = GAME_STATE_GAME_MUSIC_CONFIG;
+            }
+         }
+         if (GAME_STATE_GAME_MUSIC_CONFIG == game_state)
+         {
+            // Start playing selection music type
+            static bool init_game_music_config = true;
+            if (init_game_music_config)
+            {
+               audio_mixer_stop_music_and_sfx(audio_mixer);
+            }
+
+            // Move music type cursor
+            bool music_type_changed = false;
+            if (help_input_key_pressed(input, CUSTOM_KEY_UP))
+            {
+               const int NEW_GAME_CURSOR_Y = help_limit_clamp_i(0, game_music_cursor.y + 1, GAME_MUSIC_TYPE_HEIGHT - 1);
+               if (NEW_GAME_CURSOR_Y != game_music_cursor.y) music_type_changed = true;
+               game_music_cursor.y = NEW_GAME_CURSOR_Y;
+            }
+            if (help_input_key_pressed(input, CUSTOM_KEY_DOWN))
+            {
+               const int NEW_GAME_CURSOR_Y = help_limit_clamp_i(0, game_music_cursor.y - 1, GAME_MUSIC_TYPE_HEIGHT - 1);
+               if (NEW_GAME_CURSOR_Y != game_music_cursor.y) music_type_changed = true;
+               game_music_cursor.y = NEW_GAME_CURSOR_Y;
+            }
+            if (help_input_key_pressed(input, CUSTOM_KEY_LEFT))
+            {
+               const int NEW_GAME_CURSOR_X = help_limit_clamp_i(0, game_music_cursor.x - 1, GAME_MUSIC_TYPE_WIDTH - 1);
+               if (NEW_GAME_CURSOR_X != game_music_cursor.x) music_type_changed = true;
+               game_music_cursor.x = NEW_GAME_CURSOR_X;
+            }
+            if (help_input_key_pressed(input, CUSTOM_KEY_RIGHT))
+            {
+               const int NEW_GAME_CURSOR_X = help_limit_clamp_i(0, game_music_cursor.x + 1, GAME_MUSIC_TYPE_WIDTH - 1);
+               if (NEW_GAME_CURSOR_X != game_music_cursor.x) music_type_changed = true;
+               game_music_cursor.x = NEW_GAME_CURSOR_X;
+            }
+
+            // Select music type if selection changed or checked the first time
+            if (init_game_music_config || music_type_changed)
+            {
+               if (vec_2i_equals_xy(game_music_cursor, 0, 1))
+               {
+                  // Selected music type A
+                  audio_mixer_stop_music(audio_mixer);
+                  audio_mixer_queue_sample_music(audio_mixer, AMSID_MUSIC_GAME_A_TYPE, true);
+                  configured_game_music = AMSID_MUSIC_GAME_A_TYPE;
+               }
+
+               if (vec_2i_equals_xy(game_music_cursor, 1, 1))
+               {
+                  // Selected music type B
+                  audio_mixer_stop_music(audio_mixer);
+                  audio_mixer_queue_sample_music(audio_mixer, AMSID_MUSIC_GAME_B_TYPE, true);
+                  configured_game_music = AMSID_MUSIC_GAME_B_TYPE;
+               }
+
+               if (vec_2i_equals_xy(game_music_cursor, 0, 0))
+               {
+                  // Selected music type C
+                  audio_mixer_stop_music(audio_mixer);
+                  audio_mixer_queue_sample_music(audio_mixer, AMSID_MUSIC_GAME_C_TYPE, true);
+                  configured_game_music = AMSID_MUSIC_GAME_C_TYPE;
+               }
+
+               if (vec_2i_equals_xy(game_music_cursor, 1, 0))
+               {
+                  // Selected music type Off
+                  audio_mixer_stop_music(audio_mixer);
+                  configured_game_music = AUDIO_MIXER_SAMPLE_ID_INVALID;
+               }
+            }
+
+            // Start game with selected music
+            if (help_input_key_pressed(input, CUSTOM_KEY_START))
+            {
+               next_game_state = GAME_STATE_NEW_GAME;
+            }
+
+            // Done initializing
+            init_game_music_config = false;
          }
          if (GAME_STATE_NEW_GAME == game_state)
          {
+            // Restart music
+            audio_mixer_stop_music(audio_mixer);
+            audio_mixer_queue_sample_music(audio_mixer, configured_game_music, true);
+            // Reset stats
             stat_score = 0;
             stat_lines = 0;
             stat_level = 0;
@@ -2969,31 +3106,114 @@ int main(int argc, char * argv[])
          help_engine_render_text_at_tile(&engine, SPLASH_TEXT, 1, PLAY_FIELD_HEIGHT - 2);
       }
       if (GAME_STATE_TITLE == game_state)
+      { 
+         const char * STR_PLAYER_1 = "1PLAYER";
+         help_engine_render_text_at_tile(&engine, STR_PLAYER_1, 2, 3);
+         help_engine_render_tinted_text_at_tile(&engine, "2PLAYER", 2 + 1 + strlen(STR_PLAYER_1) + 2, 3, color_rgba_make_rgba(180, 200, 180, 0xFF));
+         help_render_engine_sprite_at_tile(&engine, 1, 3, SPRITE_MAP_TILE_FONT_ARROW_RIGHT);
+         help_engine_render_text_at_tile(&engine, "2025 Sven Garson", 2, 1);
+      }
+      if (GAME_STATE_GAME_MUSIC_CONFIG == game_state)
       {
+         // Game type
+         help_engine_render_text_at_tile(&engine, "GAME TYPE", 5, PLAY_FIELD_HEIGHT - 4);
+         help_engine_render_text_at_tile(&engine, "A-TYPE", 3, PLAY_FIELD_HEIGHT - 6);
+         help_engine_render_tinted_text_at_tile(&engine, "B-TYPE", 11, PLAY_FIELD_HEIGHT - 6, color_rgba_make_rgba(180, 200, 180, 0xFF));
+
+         // Music type based on selection
+         help_engine_render_text_at_tile(&engine, "MUSIC TYPE", 5, 7);
+
+         // A-Type
+         if (vec_2i_equals_xy(game_music_cursor, 0, 1))
+         {
+            help_engine_render_text_at_tile(&engine, "A-TYPE", 3, 5);
+         }
+         else
+         {
+            help_engine_render_tinted_text_at_tile(&engine, "A-TYPE", 3, 5, color_rgba_make_rgba(180, 200, 180, 0xFF));
+         }
+
+         // B-Type
+         if (vec_2i_equals_xy(game_music_cursor, 1, 1))
+         {
+            help_engine_render_text_at_tile(&engine, "B-TYPE", 11, 5);
+         }
+         else
+         {
+            help_engine_render_tinted_text_at_tile(&engine, "B-TYPE", 11, 5, color_rgba_make_rgba(180, 200, 180, 0xFF));
+         }
+
+         // C-Type
+         if (vec_2i_equals_xy(game_music_cursor, 0, 0))
+         {
+            help_engine_render_text_at_tile(&engine, "C-TYPE", 3, 3);
+         }
+         else
+         {
+            help_engine_render_tinted_text_at_tile(&engine, "C-TYPE", 3, 3, color_rgba_make_rgba(180, 200, 180, 0xFF));
+         }
+
+         // Off
+         if (vec_2i_equals_xy(game_music_cursor, 1, 0))
+         {
+            help_engine_render_text_at_tile(&engine, "OFF", 12, 3);
+         }
+         else
+         {
+            help_engine_render_tinted_text_at_tile(&engine, "OFF", 12, 3, color_rgba_make_rgba(180, 200, 180, 0xFF));
+         }
+      }
+      if (
+         GAME_STATE_CONTROL == game_state ||
+         GAME_STATE_PLACE == game_state ||
+         GAME_STATE_REMOVE_LINES == game_state ||
+         GAME_STATE_CONSOLIDATE_PLAY_FIELD == game_state ||
+         GAME_STATE_RESPAWN == game_state ||
+         GAME_STATE_GAME_OVER == game_state
+      )
+      {
+         if (GAME_STATE_GAME_OVER != game_state)
+         {
+            // >> Render play field
+            help_play_field_render_to_texture(&play_field, &engine);
+            // >> Active tetro
+            help_tetro_render_to_texture(&tetro_active, &engine);
+            // >> Next tetro
+            help_tetro_render_to_texture_at_tile_without_position(&tetro_next, &engine, 14, 1);
+         }
+         // >> Play field walls
+         for (int y_wall = 0; y_wall < PLAY_FIELD_HEIGHT; ++y_wall)
+         {
+            // Left wall
+            help_render_engine_sprite(&engine, 0, y_wall * PLAY_FIELD_TILE_SIZE, SPRITE_MAP_TILE_BRICK);
+            // Right wall
+            help_render_engine_sprite(
+               &engine,
+               (PLAY_FIELD_WIDTH * PLAY_FIELD_TILE_SIZE) + PLAY_FIELD_OFFSET_HORI_PIXELS,
+               y_wall * PLAY_FIELD_TILE_SIZE,
+               SPRITE_MAP_TILE_BRICK
+            );
+         }
+         // >> Gameplay stats
+         const char * STR_LABEL_SCORE = "SCORE";
+         help_engine_render_text_at_tile(&engine, STR_LABEL_SCORE, 13, PLAY_FIELD_HEIGHT - 2);
+         char str_stat_score[32];
+         snprintf(str_stat_score, sizeof(str_stat_score), "%*d", strlen(STR_LABEL_SCORE), stat_score);
+         help_engine_render_text_at_tile(&engine, str_stat_score, 13, PLAY_FIELD_HEIGHT - 3);
+
+         const char * STR_LABEL_LEVEL = "LEVEL";
+         help_engine_render_text_at_tile(&engine, STR_LABEL_LEVEL, 13, PLAY_FIELD_HEIGHT - 8);
+         char str_stat_level[32];
+         snprintf(str_stat_level, sizeof(str_stat_level), "%*d", strlen(STR_LABEL_LEVEL), stat_level);
+         help_engine_render_text_at_tile(&engine, str_stat_level, 13, PLAY_FIELD_HEIGHT - 9);
+
+         const char * STR_LABEL_LINES = "LINES";
+         help_engine_render_text_at_tile(&engine, STR_LABEL_LINES, 13, PLAY_FIELD_HEIGHT - 11);
+         char str_stat_lines[32];
+         snprintf(str_stat_lines, sizeof(str_stat_lines), "%*d", strlen(STR_LABEL_LINES), stat_lines);
+         help_engine_render_text_at_tile(&engine, str_stat_lines, 13, PLAY_FIELD_HEIGHT - 12);
 
       }
-      /*
-      // ----> Play field
-      help_play_field_render_to_texture(&play_field, &engine);
-      // ----> Active tetro while not game over
-      if (GAME_STATE_GAME_OVER != game_state)
-      {
-         help_tetro_render_to_texture(&tetro_active, &engine);
-      }
-      // ----> Play field walls
-      for (int y_wall = 0; y_wall < PLAY_FIELD_HEIGHT; ++y_wall)
-      {
-         // Left wall
-         help_render_engine_sprite(&engine, 0, y_wall * PLAY_FIELD_TILE_SIZE, SPRITE_MAP_TILE_BRICK);
-         // Right wall
-         help_render_engine_sprite(
-            &engine,
-            (PLAY_FIELD_WIDTH * PLAY_FIELD_TILE_SIZE) + PLAY_FIELD_OFFSET_HORI_PIXELS,
-            y_wall * PLAY_FIELD_TILE_SIZE,
-            SPRITE_MAP_TILE_BRICK
-         );
-      }
-      // ----> Additional rendering based on game state
       if (GAME_STATE_REMOVE_LINES == game_state)
       {
          // Latch highlight rendering
@@ -3028,26 +3248,9 @@ int main(int argc, char * argv[])
       }
       if (GAME_STATE_GAME_OVER == game_state)
       {
-         help_engine_render_text_at_tile(&engine, "Game\n\nOver", 4, PLAY_FIELD_HEIGHT - 4);
+         help_engine_render_text_at_tile(&engine, "GAME\n\nOVER", 4, PLAY_FIELD_HEIGHT - 4);
+         help_engine_render_text_at_tile(&engine, "PLEASE\n\n TRY\n\n  AGAIN", 2, 5);
       }
-      // ----> Stats
-      const char * STR_LABEL_SCORE = "SCORE";
-      
-
-      const char * STR_LABEL_LEVEL = "LEVEL";
-      help_engine_render_text_at_tile(&engine, STR_LABEL_LEVEL, 13, PLAY_FIELD_HEIGHT - 8);
-      char str_stat_level[32];
-      snprintf(str_stat_level, sizeof(str_stat_level), "%*d", strlen(STR_LABEL_LEVEL), stat_level);
-      help_engine_render_text_at_tile(&engine, str_stat_level, 13, PLAY_FIELD_HEIGHT - 9);
-
-      const char * STR_LABEL_LINES = "LINES";
-      help_engine_render_text_at_tile(&engine, STR_LABEL_LINES, 13, PLAY_FIELD_HEIGHT - 11);
-      char str_stat_lines[32];
-      snprintf(str_stat_lines, sizeof(str_stat_lines), "%*d", strlen(STR_LABEL_LINES), stat_lines);
-      help_engine_render_text_at_tile(&engine, str_stat_lines, 13, PLAY_FIELD_HEIGHT - 12);
-      // ----> Next tetro
-      help_tetro_render_to_texture_at_tile_without_position(&tetro_next, &engine, 14, 1);
-      */
 
       // TODO-GS: Timed rendering when VSync off ?
       // Copy offline to online texture
