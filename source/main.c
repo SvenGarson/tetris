@@ -2663,6 +2663,12 @@ int main(int argc, char * argv[])
    const audio_mixer_sample_id_t AMSID_EFFECT_SPLASH = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "splash"));
    const audio_mixer_sample_id_t AMSID_EFFECT_INVALID = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "invalid"));
    const audio_mixer_sample_id_t AMSID_EFFECT_SELECT = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "select"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_MOVE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "move"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_ROTATE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "rotate"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_PLACE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "place"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_HIGHLIGHT = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "highlight"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_DESTROY = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "destroy"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_GAME_OVER = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "game-over"));
 
    // Package engine components
    struct engine_s engine;
@@ -2899,6 +2905,7 @@ int main(int argc, char * argv[])
                if (!help_tetro_rotation_collides(&tetro_active, &play_field, ROTATION_CW))
                {
                   help_tetro_world_rotate_cw(&tetro_active);
+                  audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_ROTATE);
                }
             }
             if (help_input_key_pressed(input, CUSTOM_KEY_B))
@@ -2906,6 +2913,7 @@ int main(int argc, char * argv[])
                if (!help_tetro_rotation_collides(&tetro_active, &play_field, ROTATION_CCW))
                {
                   help_tetro_world_rotate_ccw(&tetro_active);
+                  audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_ROTATE);
                }
             }
 
@@ -2914,7 +2922,6 @@ int main(int argc, char * argv[])
             if (help_sdl_time_in_seconds() >= time_last_tetro_drop + TIME_DELTA_TETRO_DROP)
             {
                // Drop tetro if possible
-
                if (help_tetro_move_collides(&tetro_active, &play_field, 0, -1))
                {
                   // Drop collision - Place the tetro
@@ -2947,6 +2954,7 @@ int main(int argc, char * argv[])
                if (false == help_tetro_move_collides(&tetro_active, &play_field, move_direction, 0))
                {
                   tetro_active.tile_pos.x += move_direction;
+                  audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_MOVE);
                }
 
                // Update movement timer
@@ -2980,6 +2988,7 @@ int main(int argc, char * argv[])
          {
             // Action - Place
             help_tetro_drop(&tetro_active, &play_field, &plot_row_min, &plot_row_max);
+            audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_PLACE);
 
             // Line deletion required ?
             list_of_full_rows = help_play_field_list_of_full_rows(&play_field);
@@ -2995,6 +3004,7 @@ int main(int argc, char * argv[])
                next_game_state = GAME_STATE_REMOVE_LINES;
                time_last_removal_flash_timer = help_sdl_time_in_seconds();
                time_last_row_deletion_timer = help_sdl_time_in_seconds();
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_HIGHLIGHT);
             }
          }
          else if (GAME_STATE_REMOVE_LINES == game_state)
@@ -3026,6 +3036,7 @@ int main(int argc, char * argv[])
          {
             // Action - Consolidate play field after full row deletion - Until no more rows are moved
             help_play_field_consolidate(&play_field);
+            audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_DESTROY);
 
             // Spawn new tetro
             next_game_state = GAME_STATE_RESPAWN;
@@ -3041,6 +3052,7 @@ int main(int argc, char * argv[])
             {
                // Game over
                next_game_state = GAME_STATE_GAME_OVER;
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_GAME_OVER);
             }
             else
             {
