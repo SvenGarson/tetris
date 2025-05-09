@@ -1931,6 +1931,9 @@ struct audio_mixer_s {
    // Channel volume
    float volume_music;
    float volume_sfx;
+   // Channel pause
+   bool pause_music;
+   bool pause_sfx;
 };
 
 void * audio_mixer_destroy(struct audio_mixer_s * instance)
@@ -1986,6 +1989,8 @@ struct audio_mixer_s * audio_mixer_create(SDL_AudioStreamCallback mixer_callback
    instance->samples_store_count = 0;
    instance->volume_music = 0.75f;
    instance->volume_sfx = 0.5f;
+   instance->pause_music = false;
+   instance->pause_sfx = false;
    for (int i = 0; i < AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT; ++i)
    {
       struct audio_mixer_sample_s * sample = instance->samples_queued + i;
@@ -2172,9 +2177,6 @@ void audio_mixer_callback(void *userdata, SDL_AudioStream *stream, int additiona
    // Initialize mix to silence
    memset(float_mix, 0, SAMPLE_BYTES_REQUIRED);
 
-   // Stats
-   int active_sample_count = 0;
-
    // Mix active audio samples
    for (int i_sample = 0; i_sample < AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT; ++i_sample)
    {
@@ -2185,8 +2187,14 @@ void audio_mixer_callback(void *userdata, SDL_AudioStream *stream, int additiona
          continue;
       }
 
-      // Track stats
-      ++active_sample_count;
+      // Sample paused ?
+      const bool MUSIC_PAUSED = sample->is_music && audio_mixer->pause_music;
+      const bool SFX_PAUSED = (false == sample->is_music) && audio_mixer->pause_sfx;
+      if (MUSIC_PAUSED || SFX_PAUSED)
+      {
+         printf("\nSample paused: %d", i_sample);
+         continue;
+      }
 
       // How much sample data to process ?
       const Uint32 SAMPLE_PLAYBACK_BYTES_LEFT = sample->audio->length - sample->playback_position;
@@ -2200,7 +2208,9 @@ void audio_mixer_callback(void *userdata, SDL_AudioStream *stream, int additiona
       const float * FLOAT_SAMPLE_DATA_PLAYBACK = (float *)(sample->audio->data + sample->playback_position);
       for (Uint32 i_sample_amplitude = 0; i_sample_amplitude < FLOAT_SAMPLE_MIX_COUNT; ++i_sample_amplitude)
       {
-         float_mix[i_sample_amplitude] += FLOAT_SAMPLE_DATA_PLAYBACK[i_sample_amplitude] * SAMPLE_VOLUME;
+         const float LAST_MIX_FLOAT_SAMPLE = float_mix[i_sample_amplitude];
+         const float MIXED_FLOAT_SAMPLE = LAST_MIX_FLOAT_SAMPLE + (FLOAT_SAMPLE_DATA_PLAYBACK[i_sample_amplitude] * SAMPLE_VOLUME);
+         float_mix[i_sample_amplitude] = help_limit_clamp_f(-1.0f, MIXED_FLOAT_SAMPLE, 1.0f);
       }
 
       // Advance sample playback
@@ -2229,8 +2239,6 @@ void audio_mixer_callback(void *userdata, SDL_AudioStream *stream, int additiona
    {
       printf("\nFailed to put audio float mix into stream - Error: %s", SDL_GetError());
    }
-
-   printf("\nActive samples: %d", active_sample_count);
 
    // Cleanup
    free(float_mix);
@@ -2283,6 +2291,78 @@ bool audio_mixer_get_volume_sfx(struct audio_mixer_s * instance, float * out_vol
    if (NULL == instance) return false;
 
    *out_volume = instance->volume_sfx;
+   return true;
+}
+
+bool audio_mixer_pause_music(struct audio_mixer_s * instance)
+{
+   if (NULL == instance) return false;
+
+   instance->pause_music = true;
+
+   return true;
+}
+
+bool audio_mixer_resume_music(struct audio_mixer_s * instance)
+{
+   if (NULL == instance) return false;
+
+   instance->pause_music = false;
+
+   return true;
+}
+
+bool audio_mixer_pause_sfx(struct audio_mixer_s * instance)
+{
+   if (NULL == instance) return false;
+
+   instance->pause_sfx = true;
+
+   return true;
+}
+
+bool audio_mixer_resume_sfx(struct audio_mixer_s * instance)
+{
+   if (NULL == instance) return false;
+
+   instance->pause_sfx = false;
+
+   return true;
+}
+
+bool audio_mixer_stop_music(struct audio_mixer_s * instance)
+{
+   if (NULL == instance) return false;
+
+   // De-activate all music samples
+   for (int i_sample = 0; i_sample < AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT; ++i_sample)
+   {
+      struct audio_mixer_sample_s * const sample = instance->samples_queued + i_sample;
+      const bool SAMPLE_IS_MUSIC = sample->is_music;
+      if (SAMPLE_IS_MUSIC)
+      {
+         sample->active = false;
+      }
+   }
+
+   return true;
+}
+
+bool audio_mixer_stop_sfx(struct audio_mixer_s * instance)
+{
+   if (NULL == instance) return false;
+
+   // De-activate all music samples
+   for (int i_sample = 0; i_sample < AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT; ++i_sample)
+   {
+      struct audio_mixer_sample_s * const sample = instance->samples_queued + i_sample;
+      const bool SAMPLE_IS_SFX = (false == sample->is_music);
+      if (SAMPLE_IS_SFX)
+      {
+         sample->active = false;
+      }
+   }
+
    return true;
 }
 
@@ -2601,11 +2681,17 @@ int main(int argc, char * argv[])
          // TODO-GS: Test audio stuff
          if (help_input_key_pressed(input, CUSTOM_KEY_LEFT))
          {
-            audio_mixer_queue_sample_music(audio_mixer, AMSID_DREAD, false);
+            audio_mixer_queue_sample_sfx(audio_mixer, AMSID_STORYTIME);
          }
          if (help_input_key_pressed(input, CUSTOM_KEY_RIGHT))
          {
             audio_mixer_queue_sample_music(audio_mixer, AMSID_DREAD, true);
+         }
+         if (help_input_key_pressed(input, CUSTOM_KEY_UP))
+         {
+         }
+         if (help_input_key_pressed(input, CUSTOM_KEY_DOWN))
+         {
          }
          if (help_input_key_pressed(input, CUSTOM_KEY_A))
          {
@@ -2614,6 +2700,14 @@ int main(int argc, char * argv[])
          if (help_input_key_pressed(input, CUSTOM_KEY_B))
          {
             audio_mixer_queue_sample_sfx(audio_mixer, AMSID_STEP);
+         }
+         if (help_input_key_pressed(input, CUSTOM_KEY_START))
+         {
+            audio_mixer_stop_music(audio_mixer);
+         }
+         if (help_input_key_pressed(input, CUSTOM_KEY_SELECT))
+         {
+            audio_mixer_stop_sfx(audio_mixer);
          }
 
          // Tick based on game state
