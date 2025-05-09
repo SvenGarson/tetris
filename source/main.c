@@ -1894,6 +1894,7 @@ struct sdl_audio_data_s {
 struct audio_mixer_sample_s {
    struct sdl_audio_data_s * audio;
    bool active;
+   Uint32 playback_position;
 };
 
 #define AUDIO_MIXER_MAX_SAMPLE_STORE_COUNT (64)
@@ -1914,6 +1915,12 @@ void * audio_mixer_destroy(struct audio_mixer_s * instance)
 {
    if (instance)
    {
+      // Converted samples
+      for (int i = 0; i < instance->samples_store_count; ++i)
+      {
+         SDL_free(instance->samples_store[i].data);
+      }
+
       // Unbind device and stream
       SDL_UnbindAudioStream(instance->playback_stream);
 
@@ -1946,7 +1953,7 @@ void audio_mixer_sdl_audio_spec_log(struct SDL_AudioSpec spec)
    printf("Format: %#x | Frequency: %d | Channels: %d", spec.format, spec.freq, spec.channels);
 }
 
-struct audio_mixer_s * audio_mixer_create(SDL_AudioStreamCallback mixer_callback, void * user_data)
+struct audio_mixer_s * audio_mixer_create(SDL_AudioStreamCallback mixer_callback)
 {
    struct audio_mixer_s * instance = malloc(sizeof(struct audio_mixer_s));
    if (NULL == instance) return NULL;
@@ -1987,7 +1994,7 @@ struct audio_mixer_s * audio_mixer_create(SDL_AudioStreamCallback mixer_callback
    }
 
    // Set audio stream mixing callback
-   if (false == SDL_SetAudioStreamGetCallback(instance->playback_stream, mixer_callback, user_data))
+   if (false == SDL_SetAudioStreamGetCallback(instance->playback_stream, mixer_callback, instance->samples_queued))
    {
       printf("\nFailed to set audio stream mixing callback - Error: %s", SDL_GetError());
       return audio_mixer_destroy(instance);
@@ -2091,6 +2098,7 @@ bool audio_mixer_queue_sfx_sample(struct audio_mixer_s * instance, audio_mixer_s
 
    // Activate sample
    sample->active = true;
+   sample->playback_position = 0;
 
    // Success ?
    return sample->active;
@@ -2107,17 +2115,63 @@ const char * audio_mixer_build_res_path(const char * dir_abs_res, const char * c
 
 void audio_mixer_callback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
 {
-   // @Warning: Stream and device src/target specs must match
-   const int SAMPLE_COUNT = additional_amount / sizeof(float);
-   float * data = malloc(sizeof(float) * SAMPLE_COUNT);
-   for (int i = 0; i < SAMPLE_COUNT; ++i)
+   if (NULL == userdata)
    {
-      data[i] = 0;
+      return;
    }
 
-   SDL_PutAudioStreamData(stream, data, additional_amount);
+   // Access user data
+   struct audio_mixer_sample_s * const samples_queued = (struct audio_mixer_sample_s *)userdata;
 
-   free(data);
+   // Allocate mix buffer
+   // @Warning: amounts are int's i.e. can be negative -> int to uint conversion wrapping hazard
+   const Uint32 SAMPLE_BYTES_REQUIRED = total_amount;
+   float * float_mix = malloc(SAMPLE_BYTES_REQUIRED);
+   if (NULL == float_mix)
+   {
+      printf("\nFailed to allocated [%u] bytes for audio float mix buffer", SAMPLE_BYTES_REQUIRED);
+      return;
+   }
+
+   // Initialize mix to silence
+   memset(float_mix, 0, SAMPLE_BYTES_REQUIRED);
+
+   // Mix active audio samples
+   for (int i_sample = 0; i_sample < AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT; ++i_sample)
+   {
+      // Skip in-active samples
+      struct audio_mixer_sample_s * const sample = samples_queued + i_sample;
+      if (false == sample->active)
+      {
+         continue;
+      }
+
+      // How much sample data to process ?
+      const Uint32 SAMPLE_PLAYBACK_BYTES_LEFT = sample->audio->length - sample->playback_position;
+      const Uint32 SAMPLE_BYTES_TO_PROCESS = SDL_min(SAMPLE_PLAYBACK_BYTES_LEFT, SAMPLE_BYTES_REQUIRED);
+
+      // Add up samples
+      const Uint32 FLOAT_SAMPLE_MIX_COUNT = SAMPLE_BYTES_TO_PROCESS / sizeof(float);
+      for (Uint32 i_sample_amplitude = 0; i_sample_amplitude < FLOAT_SAMPLE_MIX_COUNT; ++i_sample_amplitude)
+      {
+         const float VOLUME = (cos(help_sdl_time_in_seconds()) + 1.0f) * 0.5f;
+         float_mix[i_sample_amplitude] += ((float *)(sample->audio->data + sample->playback_position))[i_sample_amplitude] * VOLUME;
+      }
+
+      // TODO-GS: Playback reset, looping, and not reading past buffer
+
+      // Advance sample playback
+      sample->playback_position += SAMPLE_BYTES_TO_PROCESS;
+   }
+
+   // Queue float mix
+   if (false == SDL_PutAudioStreamData(stream, float_mix, SAMPLE_BYTES_REQUIRED))
+   {
+      printf("\nFailed to put audio float mix into stream - Error: %s", SDL_GetError());
+   }
+
+   // Cleanup
+   free(float_mix);
 }
 
 // Logic - Main
@@ -2347,7 +2401,7 @@ int main(int argc, char * argv[])
    };
 
    // Setup audio mixer
-   struct audio_mixer_s * audio_mixer = audio_mixer_create(audio_mixer_callback, NULL);
+   struct audio_mixer_s * audio_mixer = audio_mixer_create(audio_mixer_callback);
    if (NULL == audio_mixer)
    {
       printf("\nFailed to create audio mixer");
