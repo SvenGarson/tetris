@@ -1,7 +1,31 @@
 # Current task
+- add volume up and down controls + visual volume feedback overlay ?
 
 # Next tasks
-- key mapping
+> show key mapping on every startup, then never again
+   > mapping
+                         
+      -----------+------
+        GAME BOY |KEYBRD
+      -----------|------
+      UP         |W     
+      DOWN       |S     
+      LEFT       |A     
+      RIGHT      |D     
+      A          |UP    
+      B          |DOWN  
+      START      |ENTER 
+      SELECT     |DELETE
+      VOLUME UP  |+     
+      VOLUME DOWN|-
+                          
+        HIT ALL KEYBRD
+          TO CONTINUE
+   > check all of them and continue to title screen
+- volume controls
+- get rid of dev exit and stuff like that
+- debug config for errors ?
+- decorations, final placement, more sprites + backgrounds (every screen !)
 
 # Bugs to fix
 - render I tetro properly

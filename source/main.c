@@ -964,6 +964,23 @@ bool help_input_key_pressed_or_held(struct input_s * input, enum custom_key_e ke
    );
 }
 
+bool help_input_any_key_pressed(struct input_s * input)
+{
+   if (NULL == input) return false;
+
+   for (int key = 0; key < CUSTOM_KEY_COUNT; ++key)
+   {
+      if (help_input_key_pressed(input, key))
+      {
+         // At least one of the keys was pressed
+         return true;
+      }
+   }
+
+   // No key was pressed
+   return false;
+}
+
 // Helpers - Border rendering
 enum sprite_map_tile_e {
    SPRITE_MAP_TILE_TETRO_BLOCK_I,
@@ -1016,6 +1033,8 @@ enum sprite_map_tile_e {
    SPRITE_MAP_TILE_FONT_GLYPH_HYPHEN,
    SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_OPEN,
    SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED,
+   SPRITE_MAP_TILE_FONT_GLYPH_PIPE,
+   SPRITE_MAP_TILE_FONT_GLYPH_PLUS,
    SPRITE_MAP_TILE_FONT_COPYRIGHT,
    SPRITE_MAP_TILE_FONT_ARROW_RIGHT,
    SPRITE_MAP_TILE_GAME_OVER_FILL,
@@ -1088,6 +1107,7 @@ struct region_2d_s region_2d_s_make(int min_x, int min_y, int width, int height)
 // Helpers - FSM
 enum game_state_e {
    GAME_STATE_SPLASH,
+   GAME_STATE_INPUT_MAPPING,
    GAME_STATE_TITLE,
    GAME_STATE_GAME_MUSIC_CONFIG,
    GAME_STATE_NEW_GAME,
@@ -2594,6 +2614,8 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_COLON, 12, 1);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_OPEN, 13, 1);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED, 14, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PIPE, 13, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PLUS, 15, 1);
    
    // >> Register additional sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_COPYRIGHT, 10, 2);
@@ -2651,6 +2673,8 @@ int main(int argc, char * argv[])
    help_font_render_map_ascii_to_sprite(&font_render, ',', SPRITE_MAP_TILE_FONT_GLYPH_COLON);
    help_font_render_map_ascii_to_sprite(&font_render, '(', SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_OPEN);
    help_font_render_map_ascii_to_sprite(&font_render, ')', SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED);
+   help_font_render_map_ascii_to_sprite(&font_render, '|', SPRITE_MAP_TILE_FONT_GLYPH_PIPE);
+   help_font_render_map_ascii_to_sprite(&font_render, '+', SPRITE_MAP_TILE_FONT_GLYPH_PLUS);
 
    // Score level mappings
    struct score_level_mapping_s score_level_mapping[] = {
@@ -2690,6 +2714,7 @@ int main(int argc, char * argv[])
    const audio_mixer_sample_id_t AMSID_EFFECT_GAME_OVER = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "game-over"));
    const audio_mixer_sample_id_t AMSID_EFFECT_DROP = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "drop"));
    const audio_mixer_sample_id_t AMSID_EFFECT_PAUSE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "pause"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_BLIP = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "blip"));
 
    // Package engine components
    struct engine_s engine;
@@ -2738,6 +2763,12 @@ int main(int argc, char * argv[])
    // >> Game over transition
    int game_over_transition_field_lines_filled = 0;
    int game_over_transition_field_lines_cleared = 0;
+   // >> Input mapping
+   bool keybr_key_confirmed[CUSTOM_KEY_COUNT];
+   for (size_t keybr = 0; keybr < sizeof(keybr_key_confirmed) / sizeof(keybr_key_confirmed[0]); ++keybr)
+   {
+      keybr_key_confirmed[keybr] = false;
+   }
 
    // FPS counter
    double last_time_fps = help_sdl_time_in_seconds();
@@ -2798,7 +2829,68 @@ int main(int argc, char * argv[])
 
             if (CONTINUE_TIME_PASSED || help_input_key_pressed(input, CUSTOM_KEY_START))
             {
-               // To title screen
+               // Show and check game controls
+               next_game_state = GAME_STATE_INPUT_MAPPING;
+               audio_mixer_stop_music_and_sfx(audio_mixer);
+            }
+         }
+         if (GAME_STATE_INPUT_MAPPING == game_state)
+         {
+            // Confirm input mapping
+            bool valid_keybr_confirmed = false;
+            if (false == keybr_key_confirmed[CUSTOM_KEY_UP] && help_input_key_pressed(input, CUSTOM_KEY_UP))
+            {
+               keybr_key_confirmed[CUSTOM_KEY_UP] = true;
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
+               valid_keybr_confirmed = true;
+            }
+            if (false == keybr_key_confirmed[CUSTOM_KEY_DOWN] && help_input_key_pressed(input, CUSTOM_KEY_DOWN))
+            {
+               keybr_key_confirmed[CUSTOM_KEY_DOWN] = true;
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
+               valid_keybr_confirmed = true;
+            }
+            if (false == keybr_key_confirmed[CUSTOM_KEY_LEFT] && help_input_key_pressed(input, CUSTOM_KEY_LEFT))
+            {
+               keybr_key_confirmed[CUSTOM_KEY_LEFT] = true;
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
+               valid_keybr_confirmed = true;
+            }
+            if (false == keybr_key_confirmed[CUSTOM_KEY_RIGHT] && help_input_key_pressed(input, CUSTOM_KEY_RIGHT))
+            {
+               keybr_key_confirmed[CUSTOM_KEY_RIGHT] = true;
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
+               valid_keybr_confirmed = true;
+            }
+            if (false == keybr_key_confirmed[CUSTOM_KEY_A] && help_input_key_pressed(input, CUSTOM_KEY_A))
+            {
+               keybr_key_confirmed[CUSTOM_KEY_A] = true;
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
+               valid_keybr_confirmed = true;
+            }
+            if (false == keybr_key_confirmed[CUSTOM_KEY_B] && help_input_key_pressed(input, CUSTOM_KEY_B))
+            {
+               keybr_key_confirmed[CUSTOM_KEY_B] = true;
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
+               valid_keybr_confirmed = true;
+            }
+            if (false == keybr_key_confirmed[CUSTOM_KEY_START] && help_input_key_pressed(input, CUSTOM_KEY_START))
+            {
+               keybr_key_confirmed[CUSTOM_KEY_START] = true;
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
+               valid_keybr_confirmed = true;
+            }
+            if (false == keybr_key_confirmed[CUSTOM_KEY_SELECT] && help_input_key_pressed(input, CUSTOM_KEY_SELECT))
+            {
+               keybr_key_confirmed[CUSTOM_KEY_SELECT] = true;
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
+               valid_keybr_confirmed = true;
+            }
+
+            const bool ALL_CONTROLS_CHECKED = false;
+            if (ALL_CONTROLS_CHECKED)
+            {
+               // Go to title screen
                next_game_state = GAME_STATE_TITLE;
                audio_mixer_stop_music_and_sfx(audio_mixer);
                audio_mixer_queue_sample_music(audio_mixer, AMSID_MUSIC_TITLE, true);
@@ -3406,6 +3498,31 @@ int main(int argc, char * argv[])
       {
          help_engine_render_text_at_tile(&engine, "THANK YOU FOR\n\n  PLAYING", 3, PLAY_FIELD_HEIGHT - 5);
          help_render_engine_sprite_at_tile(&engine, 3 + 10, PLAY_FIELD_HEIGHT - 5 - 2, SPRITE_MAP_TILE_HEART);
+      }
+      if (GAME_STATE_INPUT_MAPPING == game_state)
+      {
+         help_engine_render_text_at_tile(&engine, "-----------+--------", 0, PLAY_FIELD_HEIGHT - 1);
+         help_engine_render_text_at_tile(&engine, " GAME BOY  | KEYBRD ", 0, PLAY_FIELD_HEIGHT - 2);
+         help_engine_render_text_at_tile(&engine, "-----------+--------", 0, PLAY_FIELD_HEIGHT - 3);
+
+
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_UP]   ? "UP         |   OK   " : "UP         |W       ", 0, PLAY_FIELD_HEIGHT - 4);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_DOWN] ? "DOWN       |   OK   " : "DOWN       |S       ", 0, PLAY_FIELD_HEIGHT - 5);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_LEFT] ? "LEFT       |   OK   " : "LEFT       |A       ", 0, PLAY_FIELD_HEIGHT - 6);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_RIGHT] ? "RIGHT      |   OK   " : "RIGHT      |D       ", 0, PLAY_FIELD_HEIGHT - 7);
+
+         /*
+         help_engine_render_text_at_tile(&engine, "LEFT       |A       ", 0, PLAY_FIELD_HEIGHT - 6);
+         help_engine_render_text_at_tile(&engine, "RIGHT      |D       ", 0, PLAY_FIELD_HEIGHT - 7);
+         help_engine_render_text_at_tile(&engine, "A          |UP ARR  ", 0, PLAY_FIELD_HEIGHT - 8);
+         help_engine_render_text_at_tile(&engine, "B          |LEFT ARR", 0, PLAY_FIELD_HEIGHT - 9);
+         help_engine_render_text_at_tile(&engine, "START      |ENTER   ", 0, PLAY_FIELD_HEIGHT - 10);
+         help_engine_render_text_at_tile(&engine, "SELECT     |DELETE  ", 0, PLAY_FIELD_HEIGHT - 11);
+         help_engine_render_text_at_tile(&engine, "VOLUME UP  |PLUS KP ", 0, PLAY_FIELD_HEIGHT - 12);
+         help_engine_render_text_at_tile(&engine, "VOLUME DOWN|MINUS KP", 0, PLAY_FIELD_HEIGHT - 13);
+         help_engine_render_text_at_tile(&engine, "   HIT ALL KEYBRD   ", 0, PLAY_FIELD_HEIGHT - 13 - 2);
+         help_engine_render_text_at_tile(&engine, "  KEYS TO CONTINUE  ", 0, PLAY_FIELD_HEIGHT - 13 - 4);
+         */
       }
 
       // TODO-GS: Timed rendering when VSync off ?
