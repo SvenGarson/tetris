@@ -1,8 +1,6 @@
 # Current task
-- visual volume feedback overlay ?
 
 # Next tasks
-- get rid of dev exit and stuff like that
 - debug config for errors ?
 - decorations, final placement, more sprites + backgrounds (every screen !)
 

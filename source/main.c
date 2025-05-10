@@ -1035,6 +1035,7 @@ enum sprite_map_tile_e {
    SPRITE_MAP_TILE_FONT_GLYPH_8,
    SPRITE_MAP_TILE_FONT_GLYPH_9,
    SPRITE_MAP_TILE_FONT_GLYPH_PERIOD,
+   SPRITE_MAP_TILE_FONT_GLYPH_COMMA,
    SPRITE_MAP_TILE_FONT_GLYPH_COLON,
    SPRITE_MAP_TILE_FONT_GLYPH_HYPHEN,
    SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_OPEN,
@@ -1045,6 +1046,7 @@ enum sprite_map_tile_e {
    SPRITE_MAP_TILE_FONT_ARROW_RIGHT,
    SPRITE_MAP_TILE_GAME_OVER_FILL,
    SPRITE_MAP_TILE_HEART,
+   SPRITE_MAP_TILE_SPEAKER,
    SPRITE_MAP_TILE_NA,
    SPRITE_MAP_TILE_COUNT
 };
@@ -2056,8 +2058,8 @@ struct audio_mixer_s * audio_mixer_create(SDL_AudioStreamCallback mixer_callback
    instance->playback_device_id = 0;
    instance->playback_stream = NULL;
    instance->samples_store_count = 0;
-   instance->volume_music = 0.75f;
-   instance->volume_sfx = 0.5f;
+   instance->volume_music = 0.25f;
+   instance->volume_sfx = 0.25f;
    instance->pause_music = false;
    instance->pause_sfx = false;
    for (int i = 0; i < AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT; ++i)
@@ -2644,7 +2646,8 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_9, 9, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PERIOD, 10, 1);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_HYPHEN, 11, 1);
-   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_COLON, 12, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_COMMA, 12, 1);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_COLON, 15, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_OPEN, 13, 1);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED, 14, 1);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PIPE, 13, 2);
@@ -2655,6 +2658,7 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_ARROW_RIGHT, 11, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_GAME_OVER_FILL, 5, 4);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_HEART, 12, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_SPEAKER, 14, 2);
 
    // Create font render component
    struct font_render_s font_render;
@@ -2703,11 +2707,12 @@ int main(int argc, char * argv[])
 
    help_font_render_map_ascii_to_sprite(&font_render, '.', SPRITE_MAP_TILE_FONT_GLYPH_PERIOD);
    help_font_render_map_ascii_to_sprite(&font_render, '-', SPRITE_MAP_TILE_FONT_GLYPH_HYPHEN);
-   help_font_render_map_ascii_to_sprite(&font_render, ',', SPRITE_MAP_TILE_FONT_GLYPH_COLON);
+   help_font_render_map_ascii_to_sprite(&font_render, ',', SPRITE_MAP_TILE_FONT_GLYPH_COMMA);
    help_font_render_map_ascii_to_sprite(&font_render, '(', SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_OPEN);
    help_font_render_map_ascii_to_sprite(&font_render, ')', SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED);
    help_font_render_map_ascii_to_sprite(&font_render, '|', SPRITE_MAP_TILE_FONT_GLYPH_PIPE);
    help_font_render_map_ascii_to_sprite(&font_render, '+', SPRITE_MAP_TILE_FONT_GLYPH_PLUS);
+   help_font_render_map_ascii_to_sprite(&font_render, ':', SPRITE_MAP_TILE_FONT_GLYPH_COLON);
 
    // Score level mappings
    struct score_level_mapping_s score_level_mapping[] = {
@@ -2746,10 +2751,11 @@ int main(int argc, char * argv[])
    const audio_mixer_sample_id_t AMSID_EFFECT_DESTROY = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "destroy"));
    const audio_mixer_sample_id_t AMSID_EFFECT_GAME_OVER = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "game-over"));
    const audio_mixer_sample_id_t AMSID_EFFECT_DROP = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "drop"));
-   const audio_mixer_sample_id_t AMSID_EFFECT_PAUSE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "pause"));
    const audio_mixer_sample_id_t AMSID_EFFECT_BLIP = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "blip"));
    const audio_mixer_sample_id_t AMSID_EFFECT_INCREASE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "increase"));
    const audio_mixer_sample_id_t AMSID_EFFECT_DECREASE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "decrease"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_PAUSE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "pause"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_UN_PAUSE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "un-pause"));
 
    // Package engine components
    struct engine_s engine;
@@ -2806,6 +2812,8 @@ int main(int argc, char * argv[])
    }
    // >> Volume
    const float VOLUME_ADJUST_STEP_PER_PRESS = 0.1f;
+   const double TIME_SEC_VOLUME_OVERLAY_SHOW = 1.0f;
+   double time_until_show_volume_overlay = help_sdl_time_in_seconds();
 
    // FPS counter
    double last_time_fps = help_sdl_time_in_seconds();
@@ -2825,12 +2833,7 @@ int main(int argc, char * argv[])
       // Consume window events
       SDL_Event window_event;
       while (SDL_PollEvent(&window_event))
-      {
-         if (SDL_EVENT_KEY_DOWN == window_event.type && SDL_SCANCODE_ESCAPE == window_event.key.scancode)
-         {
-            tetris_close_requested = true;
-         }
-      }
+         ;
 
       // Tick
       const double NEW_TIME = help_sdl_time_in_seconds();
@@ -2859,6 +2862,7 @@ int main(int argc, char * argv[])
                if (audio_mixer_increase_volume_music_and_sfx_by(audio_mixer, VOLUME_ADJUST_STEP_PER_PRESS, &adjusted_volume_music, &adjusted_volume_sfx))
                {
                   audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_INCREASE);
+                  time_until_show_volume_overlay = help_sdl_time_in_seconds() + TIME_SEC_VOLUME_OVERLAY_SHOW;
                }
             }
             if (help_input_key_pressed(input, CUSTOM_KEY_VOLUME_DOWN))
@@ -2867,6 +2871,7 @@ int main(int argc, char * argv[])
                if (audio_mixer_increase_volume_music_and_sfx_by(audio_mixer, -VOLUME_ADJUST_STEP_PER_PRESS, &adjusted_volume_music, &adjusted_volume_sfx))
                {
                   audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_DECREASE);
+                  time_until_show_volume_overlay = help_sdl_time_in_seconds() + TIME_SEC_VOLUME_OVERLAY_SHOW;
                }
             }
          }
@@ -3193,7 +3198,10 @@ int main(int argc, char * argv[])
             if (help_input_key_pressed(input, CUSTOM_KEY_START))
             {
                next_game_state = GAME_STATE_PAUSE;
-               audio_mixer_pause_music_and_sfx(audio_mixer);
+
+               // Pause music but let sfx ring out
+               audio_mixer_pause_music(audio_mixer);
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_PAUSE);
             }
          }
          else if (GAME_STATE_PAUSE == game_state)
@@ -3202,7 +3210,10 @@ int main(int argc, char * argv[])
             if (help_input_key_pressed(input, CUSTOM_KEY_START))
             {
                next_game_state = GAME_STATE_CONTROL;
-               audio_mixer_resume_music_and_sfx(audio_mixer);
+
+               // Resume music
+               audio_mixer_resume_music(audio_mixer);
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_UN_PAUSE);
             }
 
             // Quit
@@ -3597,6 +3608,16 @@ int main(int argc, char * argv[])
 
          help_engine_render_text_at_tile(&engine, "   HIT ALL KEYBRD   ", 0, PLAY_FIELD_HEIGHT - 13 - 2);
          help_engine_render_text_at_tile(&engine, "  KEYS TO CONTINUE  ", 0, PLAY_FIELD_HEIGHT - 13 - 4);
+      }
+      if (help_sdl_time_in_seconds() <= time_until_show_volume_overlay)
+      {
+         float volume_music, volume_sfx;
+         if (audio_mixer_get_volume_music(audio_mixer, &volume_music) && audio_mixer_get_volume_sfx(audio_mixer, &volume_sfx))
+         {
+            static char str_volumes[64];
+            snprintf(str_volumes, sizeof(str_volumes), "Volume\n  Music: %.2f\n  Sfx  : %.2f", volume_music, volume_sfx);
+            help_engine_render_tinted_text_at_tile(&engine, str_volumes, 0, PLAY_FIELD_HEIGHT - 1, color_rgba_make_rgba(255, 0, 0, 255));
+         }
       }
 
       // TODO-GS: Timed rendering when VSync off ?
