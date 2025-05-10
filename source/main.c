@@ -1019,6 +1019,7 @@ enum sprite_map_tile_e {
    SPRITE_MAP_TILE_FONT_COPYRIGHT,
    SPRITE_MAP_TILE_FONT_ARROW_RIGHT,
    SPRITE_MAP_TILE_GAME_OVER_FILL,
+   SPRITE_MAP_TILE_HEART,
    SPRITE_MAP_TILE_NA,
    SPRITE_MAP_TILE_COUNT
 };
@@ -1098,6 +1099,8 @@ enum game_state_e {
    GAME_STATE_GAME_OVER,
    GAME_STATE_GAME_OVER_TRANSITION_FILL,
    GAME_STATE_GAME_OVER_TRANSITION_CLEAR,
+   GAME_STATE_PAUSE,
+   GAME_STATE_QUIT,
    GAME_STATE_NONE
 };
 
@@ -2232,7 +2235,6 @@ void audio_mixer_callback(void *userdata, SDL_AudioStream *stream, int additiona
       const bool SFX_PAUSED = (false == sample->is_music) && audio_mixer->pause_sfx;
       if (MUSIC_PAUSED || SFX_PAUSED)
       {
-         printf("\nSample paused: %d", i_sample);
          continue;
       }
 
@@ -2370,6 +2372,11 @@ bool audio_mixer_resume_sfx(struct audio_mixer_s * instance)
    return true;
 }
 
+bool audio_mixer_resume_music_and_sfx(struct audio_mixer_s * instance)
+{
+   return audio_mixer_resume_music(instance) && audio_mixer_resume_sfx(instance);
+}
+
 bool audio_mixer_stop_music(struct audio_mixer_s * instance)
 {
    if (NULL == instance) return false;
@@ -2409,6 +2416,11 @@ bool audio_mixer_stop_sfx(struct audio_mixer_s * instance)
 bool audio_mixer_stop_music_and_sfx(struct audio_mixer_s * instance)
 {
    return audio_mixer_stop_music(instance) && audio_mixer_stop_sfx(instance);
+}
+
+bool audio_mixer_pause_music_and_sfx(struct audio_mixer_s * instance)
+{
+   return audio_mixer_pause_music(instance) && audio_mixer_pause_sfx(instance);
 }
 
 // Logic - Main
@@ -2582,10 +2594,12 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_COLON, 12, 1);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_OPEN, 13, 1);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED, 14, 1);
+   
    // >> Register additional sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_COPYRIGHT, 10, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_ARROW_RIGHT, 11, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_GAME_OVER_FILL, 5, 4);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_HEART, 12, 2);
 
    // Create font render component
    struct font_render_s font_render;
@@ -2675,6 +2689,7 @@ int main(int argc, char * argv[])
    const audio_mixer_sample_id_t AMSID_EFFECT_DESTROY = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "destroy"));
    const audio_mixer_sample_id_t AMSID_EFFECT_GAME_OVER = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "game-over"));
    const audio_mixer_sample_id_t AMSID_EFFECT_DROP = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "drop"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_PAUSE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "pause"));
 
    // Package engine components
    struct engine_s engine;
@@ -2712,6 +2727,9 @@ int main(int argc, char * argv[])
    int stat_score = 0;
    int stat_lines = 0;
    int stat_level = 0;
+   // >> Quit
+   const double TIME_SEC_QUIT = 2.5;
+   double time_last_quit = help_sdl_time_in_seconds();
    audio_mixer_sample_id_t configured_game_music = AMSID_MUSIC_GAME_A_TYPE;
    // >> Game type music config
    const int GAME_MUSIC_TYPE_WIDTH = 2;
@@ -2782,41 +2800,52 @@ int main(int argc, char * argv[])
             {
                // To title screen
                next_game_state = GAME_STATE_TITLE;
+               audio_mixer_stop_music_and_sfx(audio_mixer);
+               audio_mixer_queue_sample_music(audio_mixer, AMSID_MUSIC_TITLE, true);
             }
          }
          if (GAME_STATE_TITLE == game_state)
          {
-            // Title screen music
-            static bool init_title = true;
-            if (init_title)
-            {
-               audio_mixer_stop_music_and_sfx(audio_mixer);
-               audio_mixer_queue_sample_music(audio_mixer, AMSID_MUSIC_TITLE, true);
-               init_title = false;
-            }
-
             // Player count select
             if (help_input_key_pressed(input, CUSTOM_KEY_LEFT) || help_input_key_pressed(input, CUSTOM_KEY_RIGHT))
             {
                // TODO-GS: Two-player mode not yet supported -> Gray out for now
                audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_INVALID);
             }
+
+            // Start game (for now in single player more)
             if (help_input_key_pressed(input, CUSTOM_KEY_START))
             {
-               // To game & music type config screen
+               // Stop title music
+               audio_mixer_stop_music_and_sfx(audio_mixer);
+               // Play selection to config screen
                audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_SELECT);
+               // Init config screen state
                next_game_state = GAME_STATE_GAME_MUSIC_CONFIG;
+               // Config music off
+               configured_game_music = AUDIO_MIXER_SAMPLE_ID_INVALID;
+               game_music_cursor = vec_2i_make_xy(1, 0);
+            }
+
+            // Quit game
+            if (help_input_key_pressed(input, CUSTOM_KEY_SELECT))
+            {
+               next_game_state = GAME_STATE_QUIT;
+               audio_mixer_stop_music_and_sfx(audio_mixer);
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_SELECT);
+               time_last_quit = help_sdl_time_in_seconds();
+            }
+         }
+         if (GAME_STATE_QUIT == game_state)
+         {
+            // Quit game after timer runs out
+            if (help_sdl_time_in_seconds() > time_last_quit + TIME_SEC_QUIT)
+            {
+               tetris_close_requested = true;
             }
          }
          if (GAME_STATE_GAME_MUSIC_CONFIG == game_state)
          {
-            // Start playing selection music type
-            static bool init_game_music_config = true;
-            if (init_game_music_config)
-            {
-               audio_mixer_stop_music_and_sfx(audio_mixer);
-            }
-
             // Move music type cursor
             bool music_type_changed = false;
             if (help_input_key_pressed(input, CUSTOM_KEY_UP))
@@ -2845,7 +2874,7 @@ int main(int argc, char * argv[])
             }
 
             // Select music type if selection changed or checked the first time
-            if (init_game_music_config || music_type_changed)
+            if (music_type_changed)
             {
                if (vec_2i_equals_xy(game_music_cursor, 0, 1))
                {
@@ -2884,30 +2913,21 @@ int main(int argc, char * argv[])
             {
                next_game_state = GAME_STATE_NEW_GAME;
             }
-
-            // Done initializing
-            init_game_music_config = false;
          }
          if (GAME_STATE_NEW_GAME == game_state)
          {
-            // Reset music playback to configured music
-            audio_mixer_stop_music_and_sfx(audio_mixer);
-            audio_mixer_queue_sample_music(audio_mixer, configured_game_music, true);
             // Reset stats
             stat_score = 0;
             stat_lines = 0;
             stat_level = 0;
             // Kickstart next tetro
             tetro_next = help_tetro_world_make_random_at_spawn();
-            // TODO-GS: Tetro flashes from 2 init's because first frame renders, but does not tick (no DT accumulated yet)
             // Action - New game
             play_field = help_play_field_make_non_occupied();
             tetro_active = help_tetro_world_make_random_at_spawn();
 
-            // Switch game mode
+            // Start gameplay
             next_game_state = GAME_STATE_CONTROL;
-
-            // Set transition data points
             time_last_tetro_drop = help_sdl_time_in_seconds();
          }
          else if (GAME_STATE_CONTROL == game_state)
@@ -2997,6 +3017,31 @@ int main(int argc, char * argv[])
 
                // Update drop timer
                time_last_tetro_player_drop = help_sdl_time_in_seconds();
+            }
+
+            // Pause
+            if (help_input_key_pressed(input, CUSTOM_KEY_START))
+            {
+               next_game_state = GAME_STATE_PAUSE;
+               audio_mixer_pause_music_and_sfx(audio_mixer);
+            }
+         }
+         else if (GAME_STATE_PAUSE == game_state)
+         {
+            // Un-pause
+            if (help_input_key_pressed(input, CUSTOM_KEY_START))
+            {
+               next_game_state = GAME_STATE_CONTROL;
+               audio_mixer_resume_music_and_sfx(audio_mixer);
+            }
+
+            // Quit
+            if (help_input_key_pressed(input, CUSTOM_KEY_SELECT))
+            {
+               audio_mixer_stop_music_and_sfx(audio_mixer);
+               audio_mixer_queue_sample_music(audio_mixer, AMSID_MUSIC_TITLE, true);
+               audio_mixer_resume_music_and_sfx(audio_mixer);
+               next_game_state = GAME_STATE_TITLE;
             }
          }
          else if (GAME_STATE_PLACE == game_state)
@@ -3117,6 +3162,7 @@ int main(int argc, char * argv[])
             if (help_input_key_pressed(input, CUSTOM_KEY_START))
             {
                next_game_state = GAME_STATE_NEW_GAME;
+               audio_mixer_queue_sample_music(audio_mixer, configured_game_music, true);
             }
             
          }
@@ -3177,6 +3223,9 @@ int main(int argc, char * argv[])
          help_engine_render_tinted_text_at_tile(&engine, "2PLAYER", 2 + 1 + strlen(STR_PLAYER_1) + 2, 3, color_rgba_make_rgba(180, 200, 180, 0xFF));
          help_render_engine_sprite_at_tile(&engine, 1, 3, SPRITE_MAP_TILE_FONT_ARROW_RIGHT);
          help_engine_render_text_at_tile(&engine, "2025 Sven Garson", 2, 1);
+
+
+         help_engine_render_text_at_tile(&engine, "SELECT TO QUIT", 3, PLAY_FIELD_HEIGHT - 4);
       }
       if (GAME_STATE_GAME_MUSIC_CONFIG == game_state)
       {
@@ -3236,10 +3285,11 @@ int main(int argc, char * argv[])
          GAME_STATE_RESPAWN == game_state ||
          GAME_STATE_GAME_OVER == game_state ||
          GAME_STATE_GAME_OVER_TRANSITION_FILL == game_state ||
-         GAME_STATE_GAME_OVER_TRANSITION_CLEAR == game_state
+         GAME_STATE_GAME_OVER_TRANSITION_CLEAR == game_state ||
+         GAME_STATE_PAUSE == game_state
       )
       {
-         if (GAME_STATE_GAME_OVER != game_state && GAME_STATE_GAME_OVER_TRANSITION_CLEAR != game_state)
+         if (GAME_STATE_GAME_OVER != game_state && GAME_STATE_GAME_OVER_TRANSITION_CLEAR != game_state && GAME_STATE_PAUSE != game_state)
          {
             // >> Render play field
             help_play_field_render_to_texture(&play_field, &engine);
@@ -3331,7 +3381,7 @@ int main(int argc, char * argv[])
       if (GAME_STATE_GAME_OVER == game_state || GAME_STATE_GAME_OVER_TRANSITION_CLEAR == game_state)
       {
          help_engine_render_text_at_tile(&engine, "GAME\n\nOVER", 4, PLAY_FIELD_HEIGHT - 4);
-         help_engine_render_text_at_tile(&engine, "PLEASE\n\n TRY\n\n  AGAIN", 2, 5);
+         help_engine_render_text_at_tile(&engine, " HIT\n\nSTART\n\n TO TRY\n\nAGAIN", 3, 8);
       }
       if (GAME_STATE_GAME_OVER_TRANSITION_CLEAR == game_state)
       {
@@ -3347,6 +3397,15 @@ int main(int argc, char * argv[])
                );
             }
          }
+      }
+      if (GAME_STATE_PAUSE == game_state)
+      {
+         help_engine_render_text_at_tile(&engine, " HIT\n\n START\n\n   TO\n\nCONTINUE\n\n   OR\n\n SELECT\n\n TO QUIT", 2, PLAY_FIELD_HEIGHT - 4);
+      }
+      if (GAME_STATE_QUIT == game_state)
+      {
+         help_engine_render_text_at_tile(&engine, "THANK YOU FOR\n\n  PLAYING", 3, PLAY_FIELD_HEIGHT - 5);
+         help_render_engine_sprite_at_tile(&engine, 3 + 10, PLAY_FIELD_HEIGHT - 5 - 2, SPRITE_MAP_TILE_HEART);
       }
 
       // TODO-GS: Timed rendering when VSync off ?
