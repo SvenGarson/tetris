@@ -845,6 +845,8 @@ enum custom_key_e {
    CUSTOM_KEY_B,
    CUSTOM_KEY_START,
    CUSTOM_KEY_SELECT,
+   CUSTOM_KEY_VOLUME_UP,
+   CUSTOM_KEY_VOLUME_DOWN,
    CUSTOM_KEY_COUNT
 };
 
@@ -915,6 +917,8 @@ bool help_input_determine_intermediate_state(struct input_s * instance)
    const enum key_state_e NEW_STATE_B = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_B], KEYBOARD_STATE[SDL_SCANCODE_LEFT]);
    const enum key_state_e NEW_STATE_START = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_START], KEYBOARD_STATE[SDL_SCANCODE_RETURN]);
    const enum key_state_e NEW_STATE_SELECT = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_SELECT], KEYBOARD_STATE[SDL_SCANCODE_DELETE]);
+   const enum key_state_e NEW_STATE_VOLUME_UP = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_VOLUME_UP], KEYBOARD_STATE[SDL_SCANCODE_KP_PLUS]);
+   const enum key_state_e NEW_STATE_VOLUME_DOWN = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_VOLUME_DOWN], KEYBOARD_STATE[SDL_SCANCODE_KP_MINUS]);
 
    instance->key_states[CUSTOM_KEY_UP] = NEW_STATE_UP;
    instance->key_states[CUSTOM_KEY_DOWN] = NEW_STATE_DOWN;
@@ -924,6 +928,8 @@ bool help_input_determine_intermediate_state(struct input_s * instance)
    instance->key_states[CUSTOM_KEY_B] = NEW_STATE_B;
    instance->key_states[CUSTOM_KEY_START] = NEW_STATE_START;
    instance->key_states[CUSTOM_KEY_SELECT] = NEW_STATE_SELECT;
+   instance->key_states[CUSTOM_KEY_VOLUME_UP] = NEW_STATE_VOLUME_UP;
+   instance->key_states[CUSTOM_KEY_VOLUME_DOWN] = NEW_STATE_VOLUME_DOWN;
 
    // Success
    return true;
@@ -2356,6 +2362,33 @@ bool audio_mixer_get_volume_sfx(struct audio_mixer_s * instance, float * out_vol
    return true;
 }
 
+bool audio_mixer_adjust_volume_music_by(struct audio_mixer_s * instance, float amount, float * out_adjusted)
+{
+   float current_music_volume;
+   if (audio_mixer_get_volume_music(instance, &current_music_volume))
+   {
+      return audio_mixer_set_volume_music(instance, current_music_volume + amount, out_adjusted);
+   }
+
+   return false;
+}
+
+bool audio_mixer_adjust_volume_sfx_by(struct audio_mixer_s * instance, float amount, float * out_adjusted)
+{
+   float current_sfx_volume;
+   if (audio_mixer_get_volume_sfx(instance, &current_sfx_volume))
+   {
+      return audio_mixer_set_volume_sfx(instance, current_sfx_volume + amount, out_adjusted);
+   }
+
+   return false;
+}
+
+bool audio_mixer_increase_volume_music_and_sfx_by(struct audio_mixer_s * instance, float amount, float * out_adjusted_music, float * out_adjusted_sfx)
+{
+   return audio_mixer_adjust_volume_music_by(instance, amount, out_adjusted_music) && audio_mixer_adjust_volume_sfx_by(instance, amount, out_adjusted_sfx);
+}
+
 bool audio_mixer_pause_music(struct audio_mixer_s * instance)
 {
    if (NULL == instance) return false;
@@ -2715,6 +2748,8 @@ int main(int argc, char * argv[])
    const audio_mixer_sample_id_t AMSID_EFFECT_DROP = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "drop"));
    const audio_mixer_sample_id_t AMSID_EFFECT_PAUSE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "pause"));
    const audio_mixer_sample_id_t AMSID_EFFECT_BLIP = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "blip"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_INCREASE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "increase"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_DECREASE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "decrease"));
 
    // Package engine components
    struct engine_s engine;
@@ -2769,6 +2804,8 @@ int main(int argc, char * argv[])
    {
       keybr_key_confirmed[keybr] = false;
    }
+   // >> Volume
+   const float VOLUME_ADJUST_STEP_PER_PRESS = 0.1f;
 
    // FPS counter
    double last_time_fps = help_sdl_time_in_seconds();
@@ -2811,7 +2848,28 @@ int main(int argc, char * argv[])
          time_simulated += FIXED_DELTA_TIME;
          fixed_delta_time_accumulator -= FIXED_DELTA_TIME;
 
+
          // Tick based on game state
+         if (GAME_STATE_INPUT_MAPPING != game_state)
+         {
+            // Volume adjustable at any time out of the input mapping screen
+            if (help_input_key_pressed(input, CUSTOM_KEY_VOLUME_UP))
+            {
+               float adjusted_volume_music, adjusted_volume_sfx;
+               if (audio_mixer_increase_volume_music_and_sfx_by(audio_mixer, VOLUME_ADJUST_STEP_PER_PRESS, &adjusted_volume_music, &adjusted_volume_sfx))
+               {
+                  audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_INCREASE);
+               }
+            }
+            if (help_input_key_pressed(input, CUSTOM_KEY_VOLUME_DOWN))
+            {
+               float adjusted_volume_music, adjusted_volume_sfx;
+               if (audio_mixer_increase_volume_music_and_sfx_by(audio_mixer, -VOLUME_ADJUST_STEP_PER_PRESS, &adjusted_volume_music, &adjusted_volume_sfx))
+               {
+                  audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_DECREASE);
+               }
+            }
+         }
          if (GAME_STATE_SPLASH == game_state)
          {
             // SFX
@@ -2886,9 +2944,29 @@ int main(int argc, char * argv[])
                audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
                valid_keybr_confirmed = true;
             }
+            if (false == keybr_key_confirmed[CUSTOM_KEY_VOLUME_UP] && help_input_key_pressed(input, CUSTOM_KEY_VOLUME_UP))
+            {
+               keybr_key_confirmed[CUSTOM_KEY_VOLUME_UP] = true;
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
+               valid_keybr_confirmed = true;
+            }
+            if (false == keybr_key_confirmed[CUSTOM_KEY_VOLUME_DOWN] && help_input_key_pressed(input, CUSTOM_KEY_VOLUME_DOWN))
+            {
+               keybr_key_confirmed[CUSTOM_KEY_VOLUME_DOWN] = true;
+               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
+               valid_keybr_confirmed = true;
+            }
 
-            const bool ALL_CONTROLS_CHECKED = false;
-            if (ALL_CONTROLS_CHECKED)
+            bool all_mapped_controls_confirmed = true;
+            for (size_t keybr = 0; keybr < sizeof(keybr_key_confirmed) / sizeof(keybr_key_confirmed[0]); ++keybr)
+            {
+               if (false == keybr_key_confirmed[keybr])
+               {
+                  all_mapped_controls_confirmed = false;
+                  break;
+               }
+            }
+            if (all_mapped_controls_confirmed)
             {
                // Go to title screen
                next_game_state = GAME_STATE_TITLE;
@@ -3506,23 +3584,19 @@ int main(int argc, char * argv[])
          help_engine_render_text_at_tile(&engine, "-----------+--------", 0, PLAY_FIELD_HEIGHT - 3);
 
 
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_UP]   ? "UP         |   OK   " : "UP         |W       ", 0, PLAY_FIELD_HEIGHT - 4);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_DOWN] ? "DOWN       |   OK   " : "DOWN       |S       ", 0, PLAY_FIELD_HEIGHT - 5);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_LEFT] ? "LEFT       |   OK   " : "LEFT       |A       ", 0, PLAY_FIELD_HEIGHT - 6);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_RIGHT] ? "RIGHT      |   OK   " : "RIGHT      |D       ", 0, PLAY_FIELD_HEIGHT - 7);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_UP]          ? "UP         |   OK   " : "UP         |W       ", 0, PLAY_FIELD_HEIGHT - 4);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_DOWN]        ? "DOWN       |   OK   " : "DOWN       |S       ", 0, PLAY_FIELD_HEIGHT - 5);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_LEFT]        ? "LEFT       |   OK   " : "LEFT       |A       ", 0, PLAY_FIELD_HEIGHT - 6);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_RIGHT]       ? "RIGHT      |   OK   " : "RIGHT      |D       ", 0, PLAY_FIELD_HEIGHT - 7);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_A]           ? "A          |   OK   " : "A          |UP ARR  ", 0, PLAY_FIELD_HEIGHT - 8);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_B]           ? "B          |   OK   " : "B          |LEFT ARR", 0, PLAY_FIELD_HEIGHT - 9);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_START]       ? "START      |   OK   " : "START      |ENTER   ", 0, PLAY_FIELD_HEIGHT - 10);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_SELECT]      ? "SELECT     |   OK   " : "SELECT     |DELETE  ", 0, PLAY_FIELD_HEIGHT - 11);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_VOLUME_UP]   ? "VOLUME UP  |   OK   " : "VOLUME UP  |PLUS KP ", 0, PLAY_FIELD_HEIGHT - 12);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_VOLUME_DOWN] ? "VOLUME DOWN|   OK   " : "VOLUME DOWN|MINUS KP", 0, PLAY_FIELD_HEIGHT - 13);
 
-         /*
-         help_engine_render_text_at_tile(&engine, "LEFT       |A       ", 0, PLAY_FIELD_HEIGHT - 6);
-         help_engine_render_text_at_tile(&engine, "RIGHT      |D       ", 0, PLAY_FIELD_HEIGHT - 7);
-         help_engine_render_text_at_tile(&engine, "A          |UP ARR  ", 0, PLAY_FIELD_HEIGHT - 8);
-         help_engine_render_text_at_tile(&engine, "B          |LEFT ARR", 0, PLAY_FIELD_HEIGHT - 9);
-         help_engine_render_text_at_tile(&engine, "START      |ENTER   ", 0, PLAY_FIELD_HEIGHT - 10);
-         help_engine_render_text_at_tile(&engine, "SELECT     |DELETE  ", 0, PLAY_FIELD_HEIGHT - 11);
-         help_engine_render_text_at_tile(&engine, "VOLUME UP  |PLUS KP ", 0, PLAY_FIELD_HEIGHT - 12);
-         help_engine_render_text_at_tile(&engine, "VOLUME DOWN|MINUS KP", 0, PLAY_FIELD_HEIGHT - 13);
          help_engine_render_text_at_tile(&engine, "   HIT ALL KEYBRD   ", 0, PLAY_FIELD_HEIGHT - 13 - 2);
          help_engine_render_text_at_tile(&engine, "  KEYS TO CONTINUE  ", 0, PLAY_FIELD_HEIGHT - 13 - 4);
-         */
       }
 
       // TODO-GS: Timed rendering when VSync off ?
