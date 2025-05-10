@@ -10,4 +10,4 @@
 3. Copy the `root/build/` directory as standalone directory with all dependencies
 
 ## How To Launch The Compiled Game
-- execute `run.bat` in the build directory
+- Execute `run.bat` in the build directory
