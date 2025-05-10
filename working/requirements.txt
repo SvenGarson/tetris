@@ -2,22 +2,12 @@
 
 # Next tasks
 - debug config for errors ?
-- decorations, final placement, more sprites + backgrounds (every screen !)
-
-# Bugs to fix
-- flicker rendering tetro on first spawn (rendering related)
-
-# Testing
-- movement and rotation collision against play field and borders
 
 # Improvement
+- remove process terminal ?
 - DT-based frame rendering interpolation
 > limit framerate when VSync disabled
    - https://lazyfoo.net/tutorials/SDL3/12-frame-rate-and-vsync/index.php
 > debug VS release build
    - process terminal
    - logging
-> Better audio mixing and more robust device / stream conversion between input data and final form
-
-# Things to learn
-- dynamic multi-dimensional arrays in C

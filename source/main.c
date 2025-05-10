@@ -404,6 +404,16 @@ struct sprite_s sprite_make(int tile_x, int tile_y, int tile_size)
    return sprite;
 }
 
+struct sprite_s sprite_make_xy_wh(int tile_x, int tile_y, int tiles_wide, int tiles_high, int tile_size)
+{
+   struct sprite_s sprite;
+
+   sprite.texture_min = vec_2i_make_xy(tile_x * tile_size, tile_y * tile_size);
+   sprite.texture_size = vec_2i_make_xy(tiles_wide * tile_size, tiles_high * tile_size);
+
+   return sprite;
+}
+
 // Logic - Textured Sprite Rendering
 bool help_tex_sprite_render_tinted(
    struct sprite_s sprite,
@@ -1046,6 +1056,10 @@ enum sprite_map_tile_e {
    SPRITE_MAP_TILE_FONT_ARROW_RIGHT,
    SPRITE_MAP_TILE_GAME_OVER_FILL,
    SPRITE_MAP_TILE_HEART,
+   SPRITE_MAP_TILE_BG_TITLE_SCREEN,
+   SPRITE_MAP_TILE_BG_CONFIG_SCREEN,
+   SPRITE_MAP_TILE_BG_PLAY_SCREEN,
+   SPRITE_MAP_TILE_BG_INPUT_MAPPING_SCREEN,
    SPRITE_MAP_TILE_SPEAKER,
    SPRITE_MAP_TILE_NA,
    SPRITE_MAP_TILE_COUNT
@@ -1062,6 +1076,15 @@ bool help_sprite_map_tile(struct sprite_map_s * instance, enum sprite_map_tile_e
    if (NULL == instance) return false;
 
    instance->tile_to_sprite[tile] = sprite_make(sprite_tile_x, sprite_tile_y, instance->tile_size);
+
+   return true;
+}
+
+bool help_sprite_map_tile_extended(struct sprite_map_s * instance, enum sprite_map_tile_e tile, int sprite_tile_x, int sprite_tile_y, int sprite_tiles_wide, int sprite_tiles_high)
+{
+   if (NULL == instance) return false;
+
+   instance->tile_to_sprite[tile] = sprite_make_xy_wh(sprite_tile_x, sprite_tile_y, sprite_tiles_wide, sprite_tiles_high, instance->tile_size);
 
    return true;
 }
@@ -1085,7 +1108,7 @@ struct sprite_map_s * help_sprite_map_create(struct texture_rgba_s * texture, in
 struct sprite_s help_sprite_map_sprite_for(const struct sprite_map_s * instance, enum sprite_map_tile_e tile)
 {
    // TODO-GS: This sucks
-   if (NULL == instance) return sprite_make(13, 13, 8);
+   if (NULL == instance) return sprite_make(7, 4, 8);
 
    // Assume that all tiles are mapped for now
    return instance->tile_to_sprite[tile];
@@ -1193,7 +1216,7 @@ bool help_render_engine_sprite(struct engine_s * engine, int x, int y, enum spri
 #define PLAY_FIELD_TILE_SIZE (8)
 #define PLAY_FIELD_WIDTH (10)
 #define PLAY_FIELD_HEIGHT (18)
-#define PLAY_FIELD_OFFSET_HORI_TILES (1)
+#define PLAY_FIELD_OFFSET_HORI_TILES (2)
 #define PLAY_FIELD_OFFSET_HORI_PIXELS (PLAY_FIELD_OFFSET_HORI_TILES * PLAY_FIELD_TILE_SIZE)
 
 bool help_render_engine_sprite_at_tile(struct engine_s * engine, int tile_x, int tile_y, enum sprite_map_tile_e tile_type)
@@ -2606,7 +2629,7 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_Z, 6, 6);
    // ----> Register play field sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BRICK, 0, 4);
-   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_HIGHLIGHT, 12, 5);   
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_HIGHLIGHT, 9, 4);   
    // ----> Register font rendering sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_A, 0, 0);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_B, 1, 0);
@@ -2652,13 +2675,17 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED, 14, 1);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PIPE, 13, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_PLUS, 15, 1);
-   
    // >> Register additional sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_COPYRIGHT, 10, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_ARROW_RIGHT, 11, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_GAME_OVER_FILL, 5, 4);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_HEART, 12, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_SPEAKER, 14, 2);
+   // >> Register extended tiles
+   help_sprite_map_tile_extended(sprite_map, SPRITE_MAP_TILE_BG_TITLE_SCREEN, 16, 0, 20, 18);
+   help_sprite_map_tile_extended(sprite_map, SPRITE_MAP_TILE_BG_CONFIG_SCREEN, 36, 0, 20, 18);
+   help_sprite_map_tile_extended(sprite_map, SPRITE_MAP_TILE_BG_PLAY_SCREEN, 16, 18, 20, 18);
+   help_sprite_map_tile_extended(sprite_map, SPRITE_MAP_TILE_BG_INPUT_MAPPING_SCREEN, 36, 18, 20, 18);
 
    // Create font render component
    struct font_render_s font_render;
@@ -2757,6 +2784,12 @@ int main(int argc, char * argv[])
    const audio_mixer_sample_id_t AMSID_EFFECT_PAUSE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "pause"));
    const audio_mixer_sample_id_t AMSID_EFFECT_UN_PAUSE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "un-pause"));
 
+   // Colors
+   const color_rgba_t COL_PAL_LIGHTEST = color_rgba_make_rgba(248, 248, 248, 0xFF);
+   const color_rgba_t COL_PAL_LIGHT = color_rgba_make_rgba(168, 168, 168, 0xFF);
+   const color_rgba_t COL_PAL_DARK = color_rgba_make_rgba(96, 96, 96, 0xFF);
+   const color_rgba_t COL_PAL_DARKEST = color_rgba_make_rgba(0x00, 0x00, 0x00, 0xFF);
+
    // Package engine components
    struct engine_s engine;
    engine.tex_virtual = tex_virtual;
@@ -2794,7 +2827,7 @@ int main(int argc, char * argv[])
    int stat_lines = 0;
    int stat_level = 0;
    // >> Quit
-   const double TIME_SEC_QUIT = 2.5;
+   const double TIME_SEC_QUIT = 3.0;
    double time_last_quit = help_sdl_time_in_seconds();
    audio_mixer_sample_id_t configured_game_music = AMSID_MUSIC_GAME_A_TYPE;
    // >> Game type music config
@@ -2850,7 +2883,6 @@ int main(int argc, char * argv[])
          // Tick housekeeping
          time_simulated += FIXED_DELTA_TIME;
          fixed_delta_time_accumulator -= FIXED_DELTA_TIME;
-
 
          // Tick based on game state
          if (GAME_STATE_INPUT_MAPPING != game_state)
@@ -3386,11 +3418,13 @@ int main(int argc, char * argv[])
 
       // Render to scene - All game states
       // ----> Clear offline texture
-      const color_rgba_t COL_GBC_LIGHTEST = color_rgba_make_rgba(238, 255, 102, 0xFF);
-      help_texture_rgba_clear(engine.tex_virtual, COL_GBC_LIGHTEST);
+      help_texture_rgba_clear(engine.tex_virtual, COL_PAL_LIGHTEST);
       // >> Render based on active game mode
       if (GAME_STATE_SPLASH == game_state)
       {
+         // Background
+         help_texture_rgba_plot_aabb(tex_virtual, 0, 0, VIRTUAL_SIZE.x, VIRTUAL_SIZE.y, COL_PAL_LIGHTEST);
+
          const char * const SPLASH_TEXT = "Just another\nunfinished TETRIS\nclone made for the\nlove of coding."
                                           "\n\nThis, is a work\nof fiction and\nnon-commercial."
                                           "\n\n\nWait or hit start."
@@ -3399,21 +3433,25 @@ int main(int argc, char * argv[])
       }
       if (GAME_STATE_TITLE == game_state)
       { 
+         // Background art
+         help_render_engine_sprite_at_tile(&engine, 0, 0, SPRITE_MAP_TILE_BG_TITLE_SCREEN);
+
+         // Player select
          const char * STR_PLAYER_1 = "1PLAYER";
          help_engine_render_text_at_tile(&engine, STR_PLAYER_1, 2, 3);
-         help_engine_render_tinted_text_at_tile(&engine, "2PLAYER", 2 + 1 + strlen(STR_PLAYER_1) + 2, 3, color_rgba_make_rgba(180, 200, 180, 0xFF));
+         help_engine_render_tinted_text_at_tile(&engine, "2PLAYER", 2 + 1 + strlen(STR_PLAYER_1) + 2, 3, COL_PAL_LIGHT);
          help_render_engine_sprite_at_tile(&engine, 1, 3, SPRITE_MAP_TILE_FONT_ARROW_RIGHT);
-         help_engine_render_text_at_tile(&engine, "2025 Sven Garson", 2, 1);
-
-
-         help_engine_render_text_at_tile(&engine, "SELECT TO QUIT", 3, PLAY_FIELD_HEIGHT - 4);
+         help_engine_render_text_at_tile(&engine, "SELECT TO QUIT", 3, 1);
       }
       if (GAME_STATE_GAME_MUSIC_CONFIG == game_state)
       {
+         // Background art
+         help_render_engine_sprite_at_tile(&engine, 0, 0, SPRITE_MAP_TILE_BG_CONFIG_SCREEN);
+
          // Game type
          help_engine_render_text_at_tile(&engine, "GAME TYPE", 5, PLAY_FIELD_HEIGHT - 4);
          help_engine_render_text_at_tile(&engine, "A-TYPE", 3, PLAY_FIELD_HEIGHT - 6);
-         help_engine_render_tinted_text_at_tile(&engine, "B-TYPE", 11, PLAY_FIELD_HEIGHT - 6, color_rgba_make_rgba(180, 200, 180, 0xFF));
+         help_engine_render_tinted_text_at_tile(&engine, "B-TYPE", 11, PLAY_FIELD_HEIGHT - 6, COL_PAL_LIGHT);
 
          // Music type based on selection
          help_engine_render_text_at_tile(&engine, "MUSIC TYPE", 5, 7);
@@ -3425,7 +3463,7 @@ int main(int argc, char * argv[])
          }
          else
          {
-            help_engine_render_tinted_text_at_tile(&engine, "A-TYPE", 3, 5, color_rgba_make_rgba(180, 200, 180, 0xFF));
+            help_engine_render_tinted_text_at_tile(&engine, "A-TYPE", 3, 5, COL_PAL_LIGHT);
          }
 
          // B-Type
@@ -3435,7 +3473,7 @@ int main(int argc, char * argv[])
          }
          else
          {
-            help_engine_render_tinted_text_at_tile(&engine, "B-TYPE", 11, 5, color_rgba_make_rgba(180, 200, 180, 0xFF));
+            help_engine_render_tinted_text_at_tile(&engine, "B-TYPE", 11, 5, COL_PAL_LIGHT);
          }
 
          // C-Type
@@ -3445,7 +3483,7 @@ int main(int argc, char * argv[])
          }
          else
          {
-            help_engine_render_tinted_text_at_tile(&engine, "C-TYPE", 3, 3, color_rgba_make_rgba(180, 200, 180, 0xFF));
+            help_engine_render_tinted_text_at_tile(&engine, "C-TYPE", 3, 3, COL_PAL_LIGHT);
          }
 
          // Off
@@ -3455,7 +3493,7 @@ int main(int argc, char * argv[])
          }
          else
          {
-            help_engine_render_tinted_text_at_tile(&engine, "OFF", 12, 3, color_rgba_make_rgba(180, 200, 180, 0xFF));
+            help_engine_render_tinted_text_at_tile(&engine, "OFF", 12, 3, COL_PAL_LIGHT);
          }
       }
       if (
@@ -3470,6 +3508,10 @@ int main(int argc, char * argv[])
          GAME_STATE_PAUSE == game_state
       )
       {
+         // >> Background art
+         help_render_engine_sprite_at_tile(&engine, 0, 0, SPRITE_MAP_TILE_BG_PLAY_SCREEN);
+
+         // >> Active stuff
          if (GAME_STATE_GAME_OVER != game_state && GAME_STATE_GAME_OVER_TRANSITION_CLEAR != game_state && GAME_STATE_PAUSE != game_state)
          {
             // >> Render play field
@@ -3477,39 +3519,26 @@ int main(int argc, char * argv[])
             // >> Active tetro
             help_tetro_render_to_texture(&tetro_active, &engine);
             // >> Next tetro
-            help_tetro_render_to_texture_at_tile_without_position(&tetro_next, &engine, 14, 1);
-         }
-         // >> Play field walls
-         for (int y_wall = 0; y_wall < PLAY_FIELD_HEIGHT; ++y_wall)
-         {
-            // Left wall
-            help_render_engine_sprite(&engine, 0, y_wall * PLAY_FIELD_TILE_SIZE, SPRITE_MAP_TILE_BRICK);
-            // Right wall
-            help_render_engine_sprite(
-               &engine,
-               (PLAY_FIELD_WIDTH * PLAY_FIELD_TILE_SIZE) + PLAY_FIELD_OFFSET_HORI_PIXELS,
-               y_wall * PLAY_FIELD_TILE_SIZE,
-               SPRITE_MAP_TILE_BRICK
-            );
+            help_tetro_render_to_texture_at_tile_without_position(&tetro_next, &engine, 14 + 1, 1);
          }
          // >> Gameplay stats
          const char * STR_LABEL_SCORE = "SCORE";
-         help_engine_render_text_at_tile(&engine, STR_LABEL_SCORE, 13, PLAY_FIELD_HEIGHT - 2);
+         help_engine_render_text_at_tile(&engine, STR_LABEL_SCORE, 14, PLAY_FIELD_HEIGHT - 2);
          char str_stat_score[32];
          snprintf(str_stat_score, sizeof(str_stat_score), "%*d", strlen(STR_LABEL_SCORE), stat_score);
-         help_engine_render_text_at_tile(&engine, str_stat_score, 13, PLAY_FIELD_HEIGHT - 3);
+         help_engine_render_text_at_tile(&engine, str_stat_score, 14, PLAY_FIELD_HEIGHT - 4);
 
          const char * STR_LABEL_LEVEL = "LEVEL";
-         help_engine_render_text_at_tile(&engine, STR_LABEL_LEVEL, 13, PLAY_FIELD_HEIGHT - 8);
+         help_engine_render_text_at_tile(&engine, STR_LABEL_LEVEL, 14, PLAY_FIELD_HEIGHT - 7);
          char str_stat_level[32];
          snprintf(str_stat_level, sizeof(str_stat_level), "%*d", strlen(STR_LABEL_LEVEL), stat_level);
-         help_engine_render_text_at_tile(&engine, str_stat_level, 13, PLAY_FIELD_HEIGHT - 9);
+         help_engine_render_text_at_tile(&engine, str_stat_level, 14, PLAY_FIELD_HEIGHT - 8);
 
          const char * STR_LABEL_LINES = "LINES";
-         help_engine_render_text_at_tile(&engine, STR_LABEL_LINES, 13, PLAY_FIELD_HEIGHT - 11);
+         help_engine_render_text_at_tile(&engine, STR_LABEL_LINES, 14, PLAY_FIELD_HEIGHT - 10);
          char str_stat_lines[32];
          snprintf(str_stat_lines, sizeof(str_stat_lines), "%*d", strlen(STR_LABEL_LINES), stat_lines);
-         help_engine_render_text_at_tile(&engine, str_stat_lines, 13, PLAY_FIELD_HEIGHT - 12);
+         help_engine_render_text_at_tile(&engine, str_stat_lines, 14, PLAY_FIELD_HEIGHT - 11);
 
       }
       if (GAME_STATE_REMOVE_LINES == game_state)
@@ -3561,8 +3590,8 @@ int main(int argc, char * argv[])
       }
       if (GAME_STATE_GAME_OVER == game_state || GAME_STATE_GAME_OVER_TRANSITION_CLEAR == game_state)
       {
-         help_engine_render_text_at_tile(&engine, "GAME\n\nOVER", 4, PLAY_FIELD_HEIGHT - 4);
-         help_engine_render_text_at_tile(&engine, " HIT\n\nSTART\n\n TO TRY\n\nAGAIN", 3, 8);
+         help_engine_render_text_at_tile(&engine, "GAME\n\n OVER", 4, PLAY_FIELD_HEIGHT - 4);
+         help_engine_render_text_at_tile(&engine, " HIT\n\nSTART\n\n TO TRY\n\nAGAIN", 4, 8);
       }
       if (GAME_STATE_GAME_OVER_TRANSITION_CLEAR == game_state)
       {
@@ -3581,30 +3610,30 @@ int main(int argc, char * argv[])
       }
       if (GAME_STATE_PAUSE == game_state)
       {
-         help_engine_render_text_at_tile(&engine, " HIT\n\n START\n\n   TO\n\nCONTINUE\n\n   OR\n\n SELECT\n\n TO QUIT", 2, PLAY_FIELD_HEIGHT - 4);
+         help_engine_render_text_at_tile(&engine, " HIT\n\n START\n\n   TO\n\nCONTINUE\n\n   OR\n\n SELECT\n\n TO QUIT", 3, PLAY_FIELD_HEIGHT - 4);
       }
       if (GAME_STATE_QUIT == game_state)
       {
-         help_engine_render_text_at_tile(&engine, "THANK YOU FOR\n\n  PLAYING", 3, PLAY_FIELD_HEIGHT - 5);
-         help_render_engine_sprite_at_tile(&engine, 3 + 10, PLAY_FIELD_HEIGHT - 5 - 2, SPRITE_MAP_TILE_HEART);
+         help_engine_render_text_at_tile(&engine, "THANK YOU FOR\n\n  PLAYING", 3, PLAY_FIELD_HEIGHT - 8);
+         help_render_engine_sprite_at_tile(&engine, 3 + 10, PLAY_FIELD_HEIGHT - 10, SPRITE_MAP_TILE_HEART);
       }
       if (GAME_STATE_INPUT_MAPPING == game_state)
       {
-         help_engine_render_text_at_tile(&engine, "-----------+--------", 0, PLAY_FIELD_HEIGHT - 1);
-         help_engine_render_text_at_tile(&engine, " GAME BOY  | KEYBRD ", 0, PLAY_FIELD_HEIGHT - 2);
-         help_engine_render_text_at_tile(&engine, "-----------+--------", 0, PLAY_FIELD_HEIGHT - 3);
+         // Background art
+         help_render_engine_sprite_at_tile(&engine, 0, 0, SPRITE_MAP_TILE_BG_INPUT_MAPPING_SCREEN);
 
-
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_UP]          ? "UP         |   OK   " : "UP         |W       ", 0, PLAY_FIELD_HEIGHT - 4);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_DOWN]        ? "DOWN       |   OK   " : "DOWN       |S       ", 0, PLAY_FIELD_HEIGHT - 5);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_LEFT]        ? "LEFT       |   OK   " : "LEFT       |A       ", 0, PLAY_FIELD_HEIGHT - 6);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_RIGHT]       ? "RIGHT      |   OK   " : "RIGHT      |D       ", 0, PLAY_FIELD_HEIGHT - 7);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_A]           ? "A          |   OK   " : "A          |UP ARR  ", 0, PLAY_FIELD_HEIGHT - 8);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_B]           ? "B          |   OK   " : "B          |LEFT ARR", 0, PLAY_FIELD_HEIGHT - 9);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_START]       ? "START      |   OK   " : "START      |ENTER   ", 0, PLAY_FIELD_HEIGHT - 10);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_SELECT]      ? "SELECT     |   OK   " : "SELECT     |DELETE  ", 0, PLAY_FIELD_HEIGHT - 11);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_VOLUME_UP]   ? "VOLUME UP  |   OK   " : "VOLUME UP  |PLUS KP ", 0, PLAY_FIELD_HEIGHT - 12);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_VOLUME_DOWN] ? "VOLUME DOWN|   OK   " : "VOLUME DOWN|MINUS KP", 0, PLAY_FIELD_HEIGHT - 13);
+         // Mapping
+         help_engine_render_text_at_tile(&engine, " GAME BOY    KEYBRD ", 0, PLAY_FIELD_HEIGHT - 1);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_UP]          ? "UP             OK   " : "UP          W       ", 0, PLAY_FIELD_HEIGHT - 3);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_DOWN]        ? "DOWN           OK   " : "DOWN        S       ", 0, PLAY_FIELD_HEIGHT - 4);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_LEFT]        ? "LEFT           OK   " : "LEFT        A       ", 0, PLAY_FIELD_HEIGHT - 5);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_RIGHT]       ? "RIGHT          OK   " : "RIGHT       D       ", 0, PLAY_FIELD_HEIGHT - 6);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_A]           ? "A              OK   " : "A           UP ARR  ", 0, PLAY_FIELD_HEIGHT - 7);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_B]           ? "B              OK   " : "B           LEFT ARR", 0, PLAY_FIELD_HEIGHT - 8);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_START]       ? "START          OK   " : "START       ENTER   ", 0, PLAY_FIELD_HEIGHT - 9);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_SELECT]      ? "SELECT         OK   " : "SELECT      DELETE  ", 0, PLAY_FIELD_HEIGHT - 10);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_VOLUME_UP]   ? "VOLUME UP      OK   " : "VOLUME UP   PLUS KP ", 0, PLAY_FIELD_HEIGHT - 11);
+         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_VOLUME_DOWN] ? "VOLUME DOWN    OK   " : "VOLUME DOWN MINUS KP", 0, PLAY_FIELD_HEIGHT - 12);
 
          help_engine_render_text_at_tile(&engine, "   HIT ALL KEYBRD   ", 0, PLAY_FIELD_HEIGHT - 13 - 2);
          help_engine_render_text_at_tile(&engine, "  KEYS TO CONTINUE  ", 0, PLAY_FIELD_HEIGHT - 13 - 4);
@@ -3616,7 +3645,7 @@ int main(int argc, char * argv[])
          {
             static char str_volumes[64];
             snprintf(str_volumes, sizeof(str_volumes), "Volume\n  Music: %.2f\n  Sfx  : %.2f", volume_music, volume_sfx);
-            help_engine_render_tinted_text_at_tile(&engine, str_volumes, 0, PLAY_FIELD_HEIGHT - 1, color_rgba_make_rgba(255, 0, 0, 255));
+            help_engine_render_tinted_text_at_tile(&engine, str_volumes, 0, PLAY_FIELD_HEIGHT - 1, COL_PAL_DARK);
          }
       }
 
