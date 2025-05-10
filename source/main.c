@@ -1018,6 +1018,7 @@ enum sprite_map_tile_e {
    SPRITE_MAP_TILE_FONT_GLYPH_PARENTHESES_CLOSED,
    SPRITE_MAP_TILE_FONT_COPYRIGHT,
    SPRITE_MAP_TILE_FONT_ARROW_RIGHT,
+   SPRITE_MAP_TILE_GAME_OVER_FILL,
    SPRITE_MAP_TILE_NA,
    SPRITE_MAP_TILE_COUNT
 };
@@ -1095,6 +1096,8 @@ enum game_state_e {
    GAME_STATE_CONSOLIDATE_PLAY_FIELD,
    GAME_STATE_RESPAWN,
    GAME_STATE_GAME_OVER,
+   GAME_STATE_GAME_OVER_TRANSITION_FILL,
+   GAME_STATE_GAME_OVER_TRANSITION_CLEAR,
    GAME_STATE_NONE
 };
 
@@ -2582,6 +2585,7 @@ int main(int argc, char * argv[])
    // >> Register additional sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_COPYRIGHT, 10, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_ARROW_RIGHT, 11, 2);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_GAME_OVER_FILL, 5, 4);
 
    // Create font render component
    struct font_render_s font_render;
@@ -2660,6 +2664,7 @@ int main(int argc, char * argv[])
    const audio_mixer_sample_id_t AMSID_MUSIC_GAME_A_TYPE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "a-type"));
    const audio_mixer_sample_id_t AMSID_MUSIC_GAME_B_TYPE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "b-type"));
    const audio_mixer_sample_id_t AMSID_MUSIC_GAME_C_TYPE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "c-type"));
+   const audio_mixer_sample_id_t AMSID_MUSIC_GAME_OVER = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "game-over"));
    const audio_mixer_sample_id_t AMSID_EFFECT_SPLASH = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "splash"));
    const audio_mixer_sample_id_t AMSID_EFFECT_INVALID = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "invalid"));
    const audio_mixer_sample_id_t AMSID_EFFECT_SELECT = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "select"));
@@ -2669,6 +2674,7 @@ int main(int argc, char * argv[])
    const audio_mixer_sample_id_t AMSID_EFFECT_HIGHLIGHT = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "highlight"));
    const audio_mixer_sample_id_t AMSID_EFFECT_DESTROY = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "destroy"));
    const audio_mixer_sample_id_t AMSID_EFFECT_GAME_OVER = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "game-over"));
+   const audio_mixer_sample_id_t AMSID_EFFECT_DROP = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "drop"));
 
    // Package engine components
    struct engine_s engine;
@@ -2694,6 +2700,10 @@ int main(int argc, char * argv[])
    double time_last_removal_flash_timer = help_sdl_time_in_seconds();
    double time_last_row_deletion_timer = help_sdl_time_in_seconds();
    double time_last_sfx = help_sdl_time_in_seconds();
+   // >> Game over transition
+   const double TIME_SEC_GAME_OVER_TRANSITION_FILL = 1.5;
+   const double TIME_SEC_GAME_OVER_TRANSITION_FILL_ROW = TIME_SEC_GAME_OVER_TRANSITION_FILL / PLAY_FIELD_HEIGHT;
+   double time_last_game_over_transition_row = help_sdl_time_in_seconds();
    // ----> Shared game state data points
    // Shared game state transition data points
    int plot_row_min, plot_row_max;
@@ -2707,6 +2717,9 @@ int main(int argc, char * argv[])
    const int GAME_MUSIC_TYPE_WIDTH = 2;
    const int GAME_MUSIC_TYPE_HEIGHT = 2;
    struct vec_2i_s game_music_cursor = vec_2i_make_xy(0, 0);
+   // >> Game over transition
+   int game_over_transition_field_lines_filled = 0;
+   int game_over_transition_field_lines_cleared = 0;
 
    // FPS counter
    double last_time_fps = help_sdl_time_in_seconds();
@@ -2877,8 +2890,8 @@ int main(int argc, char * argv[])
          }
          if (GAME_STATE_NEW_GAME == game_state)
          {
-            // Restart music
-            audio_mixer_stop_music(audio_mixer);
+            // Reset music playback to configured music
+            audio_mixer_stop_music_and_sfx(audio_mixer);
             audio_mixer_queue_sample_music(audio_mixer, configured_game_music, true);
             // Reset stats
             stat_score = 0;
@@ -2931,6 +2944,7 @@ int main(int argc, char * argv[])
                {
                   // No drop collision
                   --tetro_active.tile_pos.y;
+                  audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_DROP);
                }
 
                // Update drop timer
@@ -2977,6 +2991,7 @@ int main(int argc, char * argv[])
                   {
                      // No drop collision
                      --tetro_active.tile_pos.y;
+                     audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_DROP);
                   }
                }
 
@@ -3050,8 +3065,11 @@ int main(int argc, char * argv[])
             // Game over if new tetro overlaps any occupied play field cell
             if (help_tetro_move_collides(&tetro_active, &play_field, 0, 0))
             {
-               // Game over
-               next_game_state = GAME_STATE_GAME_OVER;
+               // Transition to game over
+               next_game_state = GAME_STATE_GAME_OVER_TRANSITION_FILL;
+               time_last_game_over_transition_row = help_sdl_time_in_seconds();
+               game_over_transition_field_lines_filled = 0;
+               audio_mixer_stop_music_and_sfx(audio_mixer);
                audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_GAME_OVER);
             }
             else
@@ -3060,12 +3078,47 @@ int main(int argc, char * argv[])
                next_game_state = GAME_STATE_CONTROL;
             }
          }
+         else if (GAME_STATE_GAME_OVER_TRANSITION_FILL == game_state)
+         {
+            if (help_sdl_time_in_seconds() >= time_last_game_over_transition_row + TIME_SEC_GAME_OVER_TRANSITION_FILL_ROW)
+            {
+               ++game_over_transition_field_lines_filled;
+               if (game_over_transition_field_lines_filled > PLAY_FIELD_HEIGHT)
+               {
+                     audio_mixer_stop_music_and_sfx(audio_mixer);
+                     audio_mixer_queue_sample_music(audio_mixer, AMSID_MUSIC_GAME_OVER, false);
+                     time_last_game_over_transition_row = help_sdl_time_in_seconds();
+                     game_over_transition_field_lines_cleared = PLAY_FIELD_HEIGHT;
+                     next_game_state = GAME_STATE_GAME_OVER_TRANSITION_CLEAR;
+               }
+
+               // Track timer
+               time_last_game_over_transition_row = help_sdl_time_in_seconds();
+            }
+         }
+         else if (GAME_STATE_GAME_OVER_TRANSITION_CLEAR == game_state)
+         {
+            if (help_sdl_time_in_seconds() >= time_last_game_over_transition_row + TIME_SEC_GAME_OVER_TRANSITION_FILL_ROW)
+            {
+               --game_over_transition_field_lines_cleared;
+               if (game_over_transition_field_lines_cleared < 0)
+               {
+                  help_play_field_clear(&play_field);
+                  next_game_state = GAME_STATE_GAME_OVER;
+               }
+
+               // Track timer
+               time_last_game_over_transition_row = help_sdl_time_in_seconds();
+            }
+         }
          else if (GAME_STATE_GAME_OVER == game_state)
          {
             // Action - Game over
-            help_play_field_clear(&play_field);
-
-            // TODO-GS: Continue player feedback loop
+            if (help_input_key_pressed(input, CUSTOM_KEY_START))
+            {
+               next_game_state = GAME_STATE_NEW_GAME;
+            }
+            
          }
          else if (GAME_STATE_NONE == game_state)
          {
@@ -3181,10 +3234,12 @@ int main(int argc, char * argv[])
          GAME_STATE_REMOVE_LINES == game_state ||
          GAME_STATE_CONSOLIDATE_PLAY_FIELD == game_state ||
          GAME_STATE_RESPAWN == game_state ||
-         GAME_STATE_GAME_OVER == game_state
+         GAME_STATE_GAME_OVER == game_state ||
+         GAME_STATE_GAME_OVER_TRANSITION_FILL == game_state ||
+         GAME_STATE_GAME_OVER_TRANSITION_CLEAR == game_state
       )
       {
-         if (GAME_STATE_GAME_OVER != game_state)
+         if (GAME_STATE_GAME_OVER != game_state && GAME_STATE_GAME_OVER_TRANSITION_CLEAR != game_state)
          {
             // >> Render play field
             help_play_field_render_to_texture(&play_field, &engine);
@@ -3258,10 +3313,40 @@ int main(int argc, char * argv[])
             }
          }
       }
-      if (GAME_STATE_GAME_OVER == game_state)
+      if (GAME_STATE_GAME_OVER_TRANSITION_FILL == game_state)
+      {
+         for (int game_over_row = 0; game_over_row < game_over_transition_field_lines_filled; ++game_over_row)
+         {
+            for (int col = 0; col < PLAY_FIELD_WIDTH; ++col)
+            {
+               help_render_engine_sprite(
+                  &engine,
+                  PLAY_FIELD_OFFSET_HORI_PIXELS + (col * PLAY_FIELD_TILE_SIZE),
+                  game_over_row * PLAY_FIELD_TILE_SIZE,
+                  SPRITE_MAP_TILE_GAME_OVER_FILL
+               );
+            }
+         }
+      }
+      if (GAME_STATE_GAME_OVER == game_state || GAME_STATE_GAME_OVER_TRANSITION_CLEAR == game_state)
       {
          help_engine_render_text_at_tile(&engine, "GAME\n\nOVER", 4, PLAY_FIELD_HEIGHT - 4);
          help_engine_render_text_at_tile(&engine, "PLEASE\n\n TRY\n\n  AGAIN", 2, 5);
+      }
+      if (GAME_STATE_GAME_OVER_TRANSITION_CLEAR == game_state)
+      {
+         for (int game_over_row = 0; game_over_row < game_over_transition_field_lines_cleared; ++game_over_row)
+         {
+            for (int col = 0; col < PLAY_FIELD_WIDTH; ++col)
+            {
+               help_render_engine_sprite(
+                  &engine,
+                  PLAY_FIELD_OFFSET_HORI_PIXELS + (col * PLAY_FIELD_TILE_SIZE),
+                  (PLAY_FIELD_HEIGHT * PLAY_FIELD_TILE_SIZE) - (game_over_row * PLAY_FIELD_TILE_SIZE),
+                  SPRITE_MAP_TILE_GAME_OVER_FILL
+               );
+            }
+         }
       }
 
       // TODO-GS: Timed rendering when VSync off ?

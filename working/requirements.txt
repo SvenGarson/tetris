@@ -1,5 +1,5 @@
 # Current task
-- add screens, music and sfx to shape out the experience
+- pause menu
 - add basic music and sound effects to gameplay
 
 # Next tasks
@@ -13,15 +13,7 @@
 - pause mode
 - the tetro flash thing
 
-# Audio stuff
-- mixing audio samples
-- caching loaded sounds into the same format (SDL_ConvertAudioSamples)
-  or using audio streams directly !
-- delta audio putting when more time passed than data given ?
-- mutex for threaded locking 
-
 # Bugs to fix
-- multi-firing of input
 - render I tetro properly
 - flicker rendering tetro on first spawn (rendering related)
 
