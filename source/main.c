@@ -441,7 +441,6 @@ bool help_tex_sprite_render_tinted(
          );
          const color_rgba_t SAFE_SOURCE_TEXEL_COLOR = SUCCESS_ACCESS_SOURCE_TEXEL ? source_texel_color : color_rgba_make_rgba(0xFF, 0x00, 0xFF, 0xFF);
 
-         // TODO-GS: Decide how to render overlapping stuff
          const bool DONT_RENDER_TRANSPARENT_TEXELS = true;
          if (DONT_RENDER_TRANSPARENT_TEXELS && (0x00 == color_rgba_channel_alpha(SAFE_SOURCE_TEXEL_COLOR)))
          {
@@ -1107,7 +1106,6 @@ struct sprite_map_s * help_sprite_map_create(struct texture_rgba_s * texture, in
 
 struct sprite_s help_sprite_map_sprite_for(const struct sprite_map_s * instance, enum sprite_map_tile_e tile)
 {
-   // TODO-GS: This sucks
    if (NULL == instance) return sprite_make(7, 4, 8);
 
    // Assume that all tiles are mapped for now
@@ -1438,7 +1436,6 @@ bool help_play_field_consolidate(struct play_field_s * play_field)
       // Copy non-empty row to new play field
       for (int col = 0; col < PLAY_FIELD_WIDTH; ++col)
       {
-         // TODO-GS: Safe access and setting of cells
          struct play_field_cell_s cell_old;
          if (help_play_field_access_cell(play_field, col, row_old, &cell_old))
          {
@@ -1465,7 +1462,6 @@ struct tetro_world_s help_tetro_world_make_random_at_spawn(void)
    // Make tetro at some position
    struct tetro_world_s random_tetro = help_tetro_world_make_type_at_tile(RANDOM_TETRO_TYPE, 0, 0);
 
-   // TODO-GS: Random tetro rotation ?
    for (int rotation = 0; rotation < rand() % 8; ++rotation)
    {
       help_tetro_world_rotate_cw(&random_tetro);
@@ -2192,7 +2188,6 @@ struct audio_mixer_sample_s * audio_mixer_access_vacant_sample(struct audio_mixe
 {
    if (NULL == instance) return NULL;
 
-   // TODO-GS: Find a faster solution ?
    for (int i = 0; i < AUDIO_MIXER_MAX_SAMPLE_QUEUED_COUNT; ++i)
    {
       struct audio_mixer_sample_s * const SAMPLE = instance->samples_queued + i;
@@ -2539,8 +2534,8 @@ int main(int argc, char * argv[])
    const bool SUCCESS_USE_VSYNC = SDL_SetRenderVSync(sdl_renderer, 1);
 
    // Other window related configuration
-   //SDL_SetWindowMouseGrab(sdl_window, true);
-   //SDL_HideCursor();
+   SDL_SetWindowMouseGrab(sdl_window, true);
+   SDL_HideCursor();
 
    // Create offline rendering resources
    struct texture_rgba_s * tex_virtual = help_texture_rgba_make(160, 144, color_rgba_make_rgba(0x00, 0x00, 0x00, 0xFF));
@@ -2599,27 +2594,25 @@ int main(int argc, char * argv[])
    // Set random rand() seed ?
    if (CONFIG_DO_SET_RANDOM_SEED)
    {
-      // TODO-GS: Safer / Higher resolution argument for srand() ?
+      // @Warning: Safer i.e. higher resolution argument fort srand() ?
       const unsigned int SEED_RANDOM = (unsigned int)SDL_GetTicks();
       srand(SEED_RANDOM);
    }
 
    // Log engine status
-   // TODO-GS: Config symbols
    const int DW = 20;
    printf("\n\nEngine Information");
    printf("\n\t%-*s: %s", DW, "resource directory", DIR_ABS_RES);
    printf("\n\t%-*s: %s", DW, "VSYNC", SUCCESS_USE_VSYNC ? "enabled" : "disabled");
 
-   // Engine
-   // ----> Sprite map
+   // Create sprite map
    struct sprite_map_s * sprite_map = help_sprite_map_create(tex_sprites, 13, 13, 8);
    if (NULL == sprite_map)
    {
       printf("\nFailed to create sprite map");
       return EXIT_FAILURE;
    }
-   // ----> Register tetro sprites
+   // >> Register tetro sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_I, 0, 6);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_O, 1, 6);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_Lr, 2, 6);
@@ -2627,10 +2620,10 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_S, 4, 6);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_T, 5, 6);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_Z, 6, 6);
-   // ----> Register play field sprites
+   // >> Register play field sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_BRICK, 0, 4);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_HIGHLIGHT, 9, 4);   
-   // ----> Register font rendering sprites
+   // >> Register font rendering sprites
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_A, 0, 0);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_B, 1, 0);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_FONT_GLYPH_C, 2, 0);
@@ -2681,20 +2674,20 @@ int main(int argc, char * argv[])
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_GAME_OVER_FILL, 5, 4);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_HEART, 12, 2);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_SPEAKER, 14, 2);
-   // >> Register extended tiles
+   // >> Register extended background sprites
    help_sprite_map_tile_extended(sprite_map, SPRITE_MAP_TILE_BG_TITLE_SCREEN, 16, 0, 20, 18);
    help_sprite_map_tile_extended(sprite_map, SPRITE_MAP_TILE_BG_CONFIG_SCREEN, 36, 0, 20, 18);
    help_sprite_map_tile_extended(sprite_map, SPRITE_MAP_TILE_BG_PLAY_SCREEN, 16, 18, 20, 18);
    help_sprite_map_tile_extended(sprite_map, SPRITE_MAP_TILE_BG_INPUT_MAPPING_SCREEN, 36, 18, 20, 18);
 
-   // Create font render component
+   // Create font render
    struct font_render_s font_render;
    if (false == font_render_make(&font_render))
    {
       printf("\nFailed to create font render component");
       return EXIT_FAILURE;
    }
-   // ----> Map font render ascii codes to renderable sprites
+   // >> map font render ascii codes to renderable sprites
    help_font_render_map_ascii_to_sprite(&font_render, 'A', SPRITE_MAP_TILE_FONT_GLYPH_A);
    help_font_render_map_ascii_to_sprite(&font_render, 'B', SPRITE_MAP_TILE_FONT_GLYPH_B);
    help_font_render_map_ascii_to_sprite(&font_render, 'C', SPRITE_MAP_TILE_FONT_GLYPH_C);
@@ -2731,7 +2724,6 @@ int main(int argc, char * argv[])
    help_font_render_map_ascii_to_sprite(&font_render, '7', SPRITE_MAP_TILE_FONT_GLYPH_7);
    help_font_render_map_ascii_to_sprite(&font_render, '8', SPRITE_MAP_TILE_FONT_GLYPH_8);
    help_font_render_map_ascii_to_sprite(&font_render, '9', SPRITE_MAP_TILE_FONT_GLYPH_9);
-
    help_font_render_map_ascii_to_sprite(&font_render, '.', SPRITE_MAP_TILE_FONT_GLYPH_PERIOD);
    help_font_render_map_ascii_to_sprite(&font_render, '-', SPRITE_MAP_TILE_FONT_GLYPH_HYPHEN);
    help_font_render_map_ascii_to_sprite(&font_render, ',', SPRITE_MAP_TILE_FONT_GLYPH_COMMA);
@@ -2741,7 +2733,7 @@ int main(int argc, char * argv[])
    help_font_render_map_ascii_to_sprite(&font_render, '+', SPRITE_MAP_TILE_FONT_GLYPH_PLUS);
    help_font_render_map_ascii_to_sprite(&font_render, ':', SPRITE_MAP_TILE_FONT_GLYPH_COLON);
 
-   // Score level mappings
+   // Map score to level
    struct score_level_mapping_s score_level_mapping[] = {
       score_level_mapping_make(0, 0),
       score_level_mapping_make(20, 1),
@@ -2762,7 +2754,7 @@ int main(int argc, char * argv[])
       printf("\nFailed to create audio mixer");
       return EXIT_FAILURE;
    }
-   // >> Register sounds for playback
+   // >> Register audio mixer music and sound effects
    const audio_mixer_sample_id_t AMSID_MUSIC_TITLE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "title"));
    const audio_mixer_sample_id_t AMSID_MUSIC_GAME_A_TYPE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "a-type"));
    const audio_mixer_sample_id_t AMSID_MUSIC_GAME_B_TYPE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "music", "b-type"));
@@ -2784,13 +2776,13 @@ int main(int argc, char * argv[])
    const audio_mixer_sample_id_t AMSID_EFFECT_PAUSE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "pause"));
    const audio_mixer_sample_id_t AMSID_EFFECT_UN_PAUSE = audio_mixer_register_WAV(audio_mixer, audio_mixer_build_res_path(DIR_ABS_RES, "effects", "un-pause"));
 
-   // Colors
+   // Specify Game Boy colors palette used in imported artworkd
    const color_rgba_t COL_PAL_LIGHTEST = color_rgba_make_rgba(248, 248, 248, 0xFF);
    const color_rgba_t COL_PAL_LIGHT = color_rgba_make_rgba(168, 168, 168, 0xFF);
    const color_rgba_t COL_PAL_DARK = color_rgba_make_rgba(96, 96, 96, 0xFF);
    const color_rgba_t COL_PAL_DARKEST = color_rgba_make_rgba(0x00, 0x00, 0x00, 0xFF);
 
-   // Package engine components
+   // Package engine components for easier use
    struct engine_s engine;
    engine.tex_virtual = tex_virtual;
    engine.tex_sprites = tex_sprites;
@@ -2798,39 +2790,38 @@ int main(int argc, char * argv[])
    engine.font_render = &font_render;
 
    // Game state
-   // ----> Tick state
+   // >> Game state transitions
    enum game_state_e game_state = GAME_STATE_SPLASH;
    enum game_state_e next_game_state = GAME_STATE_NONE;
-   // ----> Playing field
+   // >> Playing field
    struct play_field_s play_field = help_play_field_make_non_occupied();
-   // ----> Active tetro
+   // >> Active tetro
    struct tetro_world_s tetro_active = help_tetro_world_make_random_at_spawn();
    struct tetro_world_s tetro_next = help_tetro_world_make_random_at_spawn();
-   // ---- Timers
+   // >> Splash screen
    double time_splash_start = help_sdl_time_in_seconds();
+   // >> Gameplay controls
    double time_last_tetro_drop = help_sdl_time_in_seconds();
    double time_last_tetro_player_move = help_sdl_time_in_seconds();
    double time_last_tetro_player_drop = help_sdl_time_in_seconds();
+   // >> Play field row highlighting and removal   
    double time_last_removal_flash_timer = help_sdl_time_in_seconds();
    double time_last_row_deletion_timer = help_sdl_time_in_seconds();
-   double time_last_sfx = help_sdl_time_in_seconds();
-   // >> Game over transition
+   int plot_row_min, plot_row_max;
+   struct list_of_rows_s list_of_full_rows;
+   // >> Game over
    const double TIME_SEC_GAME_OVER_TRANSITION_FILL = 1.5;
    const double TIME_SEC_GAME_OVER_TRANSITION_FILL_ROW = TIME_SEC_GAME_OVER_TRANSITION_FILL / PLAY_FIELD_HEIGHT;
    double time_last_game_over_transition_row = help_sdl_time_in_seconds();
-   // ----> Shared game state data points
-   // Shared game state transition data points
-   int plot_row_min, plot_row_max;
-   struct list_of_rows_s list_of_full_rows;
-   // ----> Stats
+   // >> Gameplay stats
    int stat_score = 0;
    int stat_lines = 0;
    int stat_level = 0;
-   // >> Quit
+   // >> Quitting the game
    const double TIME_SEC_QUIT = 3.0;
    double time_last_quit = help_sdl_time_in_seconds();
+   // >> Game type and music config
    audio_mixer_sample_id_t configured_game_music = AMSID_MUSIC_GAME_A_TYPE;
-   // >> Game type music config
    const int GAME_MUSIC_TYPE_WIDTH = 2;
    const int GAME_MUSIC_TYPE_HEIGHT = 2;
    struct vec_2i_s game_music_cursor = vec_2i_make_xy(0, 0);
@@ -3016,7 +3007,7 @@ int main(int argc, char * argv[])
             // Player count select
             if (help_input_key_pressed(input, CUSTOM_KEY_LEFT) || help_input_key_pressed(input, CUSTOM_KEY_RIGHT))
             {
-               // TODO-GS: Two-player mode not yet supported -> Gray out for now
+               // @Note: Grey out 2 player mode as it's currently not supported
                audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_INVALID);
             }
 
@@ -3127,8 +3118,10 @@ int main(int argc, char * argv[])
             stat_score = 0;
             stat_lines = 0;
             stat_level = 0;
+
             // Kickstart next tetro
             tetro_next = help_tetro_world_make_random_at_spawn();
+
             // Action - New game
             play_field = help_play_field_make_non_occupied();
             tetro_active = help_tetro_world_make_random_at_spawn();
@@ -3295,8 +3288,6 @@ int main(int argc, char * argv[])
                   {
                      // Reflect in stats
                      ++stat_lines;
-
-                     // TODO-GS: Score line removal
                      stat_score += 10;
                   }
                }
@@ -3383,11 +3374,10 @@ int main(int argc, char * argv[])
          {
             // Action - None - Should never happen
             printf("\nGame state NONE - Nothing to simulate");
-            exit(-1);
+            tetris_close_requested = true;
          }
 
          // Level detection
-         // TODO-GS: Parameterize level-up's and use a clean table instead of this
          const struct score_level_mapping_s * ACTIVE_SCORE_MAPPING = NULL;
          for (size_t i = 0; i < (sizeof(score_level_mapping) / sizeof(score_level_mapping[0])); ++i)
          {
@@ -3649,7 +3639,6 @@ int main(int argc, char * argv[])
          }
       }
 
-      // TODO-GS: Timed rendering when VSync off ?
       // Copy offline to online texture
       const bool SUCCESS_UPDATE_TEXTURE = SDL_UpdateTexture(
          sdl_texture_online,
