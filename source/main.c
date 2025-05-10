@@ -2597,7 +2597,7 @@ int main(int argc, char * argv[])
       return EXIT_FAILURE;
    }
    // ----> Register tetro sprites
-   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_I, 0, 7);
+   help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_I, 0, 6);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_O, 1, 6);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_Lr, 2, 6);
    help_sprite_map_tile(sprite_map, SPRITE_MAP_TILE_TETRO_BLOCK_L, 3, 6);

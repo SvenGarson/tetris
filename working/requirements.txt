@@ -5,7 +5,6 @@
 - decorations, final placement, more sprites + backgrounds (every screen !)
 
 # Bugs to fix
-- render I tetro properly
 - flicker rendering tetro on first spawn (rendering related)
 
 # Testing
