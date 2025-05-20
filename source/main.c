@@ -917,6 +917,7 @@ bool help_input_determine_intermediate_state(struct input_s * instance)
 {
    if (NULL == instance) return false;
 
+   // @Note: Hardcoded on this branch for Arduino-based NES controller layout
    const bool * KEYBOARD_STATE = SDL_GetKeyboardState(NULL);
    const enum key_state_e NEW_STATE_UP = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_UP], KEYBOARD_STATE[SDL_SCANCODE_W]);
    const enum key_state_e NEW_STATE_DOWN = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_DOWN], KEYBOARD_STATE[SDL_SCANCODE_S]);
@@ -924,8 +925,8 @@ bool help_input_determine_intermediate_state(struct input_s * instance)
    const enum key_state_e NEW_STATE_RIGHT = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_RIGHT], KEYBOARD_STATE[SDL_SCANCODE_D]);
    const enum key_state_e NEW_STATE_A = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_A], KEYBOARD_STATE[SDL_SCANCODE_UP]);
    const enum key_state_e NEW_STATE_B = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_B], KEYBOARD_STATE[SDL_SCANCODE_LEFT]);
-   const enum key_state_e NEW_STATE_START = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_START], KEYBOARD_STATE[SDL_SCANCODE_RETURN]);
-   const enum key_state_e NEW_STATE_SELECT = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_SELECT], KEYBOARD_STATE[SDL_SCANCODE_DELETE]);
+   const enum key_state_e NEW_STATE_START = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_START], KEYBOARD_STATE[SDL_SCANCODE_F]);
+   const enum key_state_e NEW_STATE_SELECT = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_SELECT], KEYBOARD_STATE[SDL_SCANCODE_G]);
    const enum key_state_e NEW_STATE_VOLUME_UP = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_VOLUME_UP], KEYBOARD_STATE[SDL_SCANCODE_KP_PLUS]);
    const enum key_state_e NEW_STATE_VOLUME_DOWN = help_input_determine_key_state(instance->key_states[CUSTOM_KEY_VOLUME_DOWN], KEYBOARD_STATE[SDL_SCANCODE_KP_MINUS]);
 
@@ -2972,28 +2973,17 @@ int main(int argc, char * argv[])
                audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
                valid_keybr_confirmed = true;
             }
-            if (false == keybr_key_confirmed[CUSTOM_KEY_VOLUME_UP] && help_input_key_pressed(input, CUSTOM_KEY_VOLUME_UP))
-            {
-               keybr_key_confirmed[CUSTOM_KEY_VOLUME_UP] = true;
-               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
-               valid_keybr_confirmed = true;
-            }
-            if (false == keybr_key_confirmed[CUSTOM_KEY_VOLUME_DOWN] && help_input_key_pressed(input, CUSTOM_KEY_VOLUME_DOWN))
-            {
-               keybr_key_confirmed[CUSTOM_KEY_VOLUME_DOWN] = true;
-               audio_mixer_queue_sample_sfx(audio_mixer, AMSID_EFFECT_BLIP);
-               valid_keybr_confirmed = true;
-            }
 
-            bool all_mapped_controls_confirmed = true;
-            for (size_t keybr = 0; keybr < sizeof(keybr_key_confirmed) / sizeof(keybr_key_confirmed[0]); ++keybr)
-            {
-               if (false == keybr_key_confirmed[keybr])
-               {
-                  all_mapped_controls_confirmed = false;
-                  break;
-               }
-            }
+            bool all_mapped_controls_confirmed = (
+               keybr_key_confirmed[CUSTOM_KEY_A] &&
+               keybr_key_confirmed[CUSTOM_KEY_B] &&
+               keybr_key_confirmed[CUSTOM_KEY_START] &&
+               keybr_key_confirmed[CUSTOM_KEY_SELECT] &&
+               keybr_key_confirmed[CUSTOM_KEY_UP] &&
+               keybr_key_confirmed[CUSTOM_KEY_DOWN] &&
+               keybr_key_confirmed[CUSTOM_KEY_LEFT] &&
+               keybr_key_confirmed[CUSTOM_KEY_RIGHT]
+            );
             if (all_mapped_controls_confirmed)
             {
                // Go to title screen
@@ -3613,7 +3603,7 @@ int main(int argc, char * argv[])
          help_render_engine_sprite_at_tile(&engine, 0, 0, SPRITE_MAP_TILE_BG_INPUT_MAPPING_SCREEN);
 
          // Mapping
-         help_engine_render_text_at_tile(&engine, " GAME BOY    KEYBRD ", 0, PLAY_FIELD_HEIGHT - 1);
+         help_engine_render_text_at_tile(&engine, " GAME BOY     NES   ", 0, PLAY_FIELD_HEIGHT - 1);
          help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_UP]          ? "UP             OK   " : "UP          W       ", 0, PLAY_FIELD_HEIGHT - 3);
          help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_DOWN]        ? "DOWN           OK   " : "DOWN        S       ", 0, PLAY_FIELD_HEIGHT - 4);
          help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_LEFT]        ? "LEFT           OK   " : "LEFT        A       ", 0, PLAY_FIELD_HEIGHT - 5);
@@ -3622,11 +3612,11 @@ int main(int argc, char * argv[])
          help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_B]           ? "B              OK   " : "B           LEFT ARR", 0, PLAY_FIELD_HEIGHT - 8);
          help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_START]       ? "START          OK   " : "START       ENTER   ", 0, PLAY_FIELD_HEIGHT - 9);
          help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_SELECT]      ? "SELECT         OK   " : "SELECT      DELETE  ", 0, PLAY_FIELD_HEIGHT - 10);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_VOLUME_UP]   ? "VOLUME UP      OK   " : "VOLUME UP   PLUS KP ", 0, PLAY_FIELD_HEIGHT - 11);
-         help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_VOLUME_DOWN] ? "VOLUME DOWN    OK   " : "VOLUME DOWN MINUS KP", 0, PLAY_FIELD_HEIGHT - 12);
+         //help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_VOLUME_UP]   ? "VOLUME UP      OK   " : "VOLUME UP   PLUS KP ", 0, PLAY_FIELD_HEIGHT - 11);
+         //help_engine_render_text_at_tile(&engine, keybr_key_confirmed[CUSTOM_KEY_VOLUME_DOWN] ? "VOLUME DOWN    OK   " : "VOLUME DOWN MINUS KP", 0, PLAY_FIELD_HEIGHT - 12);
 
-         help_engine_render_text_at_tile(&engine, "   HIT ALL KEYBRD   ", 0, PLAY_FIELD_HEIGHT - 13 - 2);
-         help_engine_render_text_at_tile(&engine, "  KEYS TO CONTINUE  ", 0, PLAY_FIELD_HEIGHT - 13 - 4);
+         help_engine_render_text_at_tile(&engine, "   HIT ALL NES   ", 0, PLAY_FIELD_HEIGHT - 13 - 2);
+         help_engine_render_text_at_tile(&engine, "BUTTONS TO CONTINUE", 0, PLAY_FIELD_HEIGHT - 13 - 4);
       }
       if (help_sdl_time_in_seconds() <= time_until_show_volume_overlay)
       {
